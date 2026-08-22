@@ -22,6 +22,9 @@ unsigned long lastSeen = 0;
 //laser status (initially off)
 bool laserOn = false;
 
+//last ytime we print "searching beacon"
+unsigned long lastSearching = 0;
+
 //---------------------------------------------------------------------------------------------------------
 void setup() {
   Serial.begin(9600);
@@ -56,6 +59,12 @@ void loop() {
 }
 
   bool shouldBeOn = (lastSeen != 0) && (millis() - lastSeen < COUNTDOWN_MS);
+
+    //printing "searching beacon..." / second
+  if (!shouldBeOn && millis() - lastSearching >= 1000){
+    Serial.println("Searching beacon...");
+    lastSearching = millis();
+  }
 
   if (shouldBeOn && !laserOn) {
     digitalWrite(LASER_PIN, HIGH);
