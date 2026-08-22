@@ -34,6 +34,14 @@ void setup() {
   digitalWrite(LASER_PIN, LOW);
   digitalWrite(LED_BUILTIN, LOW);
 
+  //wait 30 seconds after power-up before spinning (with countdown)
+  for (int s = 30; s > 0; s--) {
+    Serial.print("Starting in ");
+    Serial.print(s);
+    Serial.println(" s...");
+    delay(1000);
+  }
+
   //start spinning slowly in ONE direction and never stop
   motorForward(SPIN_SPEED);
 }
