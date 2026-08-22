@@ -8,7 +8,6 @@ const int LASER_PIN = 12;  // change to whatever pin is actually connected
 
 //ir receiver
 const int SENSOR_PIN = 8;
-//int sensorLength = 4;
 
 //Spin Speed
 const int SPIN_SPEED = 80;

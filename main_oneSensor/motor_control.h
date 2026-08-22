@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 
-volatile int pos;
+extern volatile int pos;
 
 void motorForward(int speedValue);
 void motorReverse(int speedValue);
