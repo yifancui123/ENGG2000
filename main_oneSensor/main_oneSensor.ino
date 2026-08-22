@@ -10,7 +10,8 @@ const int LASER_PIN = 12;  // change to whatever pin is actually connected
 const int SENSOR_PIN = 8;
 
 //Spin Speed
-const int SPIN_SPEED = 80;
+const int SLOW_SPEED = 80;
+const int SCAN_SPEED = 150;
 
 //Countdown: if laser is on, but no beacon is found after 500ms (0.5s), turn off the laser
 const unsigned long COUNTDOWN_MS = 500;
@@ -43,13 +44,16 @@ void setup() {
   }
 
   //start spinning slowly in ONE direction and never stop
-  motorForward(SPIN_SPEED);
+  motorForward(SCAN_SPEED);
 }
 //---------------------------------------------------------------------------------------------------------
 void loop() {
-  if(sawBeacon(SENSOR_PIN)){
+  if (sawBeacon(SENSOR_PIN)) {
+    motorForward(SLOW_SPEED);
     lastSeen = millis();
-  }
+} else {
+    motorForward(SCAN_SPEED);
+}
 
   bool shouldBeOn = (lastSeen != 0) && (millis() - lastSeen < COUNTDOWN_MS);
 
