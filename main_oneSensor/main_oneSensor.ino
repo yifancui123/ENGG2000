@@ -1,7 +1,7 @@
 #include "ir_sensor.h"
 #include "motor_control.h"
 
-const unsigned long laserTimer = 2000;
+//const unsigned long laserTimer = 2000;
 
 //laser pin
 const int LASER_PIN = 12;  // change to whatever pin is actually connected
@@ -13,16 +13,16 @@ const int SENSOR_PIN = 8;
 const int SLOW_SPEED = 80;
 const int SCAN_SPEED = 150;
 
-//Countdown: if laser is on, but no beacon is found after 500ms (0.5s), turn off the laser
-const unsigned long COUNTDOWN_MS = 500;
+//How long the laser stays ON once the beacon triggers it (5s for now)
+const unsigned long LASER_ON_MS = 5000;
 
-//last time seen the beacon
-unsigned long lastSeen = 0;
+//when the laser was turned on
+unsigned long laserStart = 0;
 
 //laser status (initially off)
 bool laserOn = false;
 
-//last ytime we print "searching beacon"
+//last time we print "searching beacon"
 unsigned long lastSearching = 0;
 
 //---------------------------------------------------------------------------------------------------------
@@ -51,30 +51,34 @@ void setup() {
 }
 //---------------------------------------------------------------------------------------------------------
 void loop() {
-  if (sawBeacon(SENSOR_PIN)) {
+  bool seeBeacon = sawBeacon(SENSOR_PIN);
+
+  //fast speed while searching; slow speed after detecting beacon
+  if (laserOn){
     motorForward(SLOW_SPEED);
-    lastSeen = millis();
-} else {
+  } else {
     motorForward(SCAN_SPEED);
-}
-
-  bool shouldBeOn = (lastSeen != 0) && (millis() - lastSeen < COUNTDOWN_MS);
-
-    //printing "searching beacon..." / second
-  if (!shouldBeOn && millis() - lastSearching >= 1000){
-    Serial.println("Searching beacon...");
-    lastSearching = millis();
   }
 
-  if (shouldBeOn && !laserOn) {
+  if (seeBeacon && !laserOn) {
     digitalWrite(LASER_PIN, HIGH);
     digitalWrite(LED_BUILTIN, HIGH);
-    Serial.println("Beacon in range - laser ON");
+    Serial.println("Beacon found - laser ON");
     laserOn = true;
-  }else if (!shouldBeOn && laserOn){
+    laserStart = millis();
+  }
+
+  //turn the laser OFF after 5s
+  if (laserOn && millis() - laserStart >= LASER_ON_MS) {
     digitalWrite(LASER_PIN, LOW);
     digitalWrite(LED_BUILTIN, LOW);
-    Serial.println("Beacon lost - laser OFF");
+    Serial.println("Timer expired - laser OFF");
     laserOn = false;
+  }
+
+   //while the laser is off, print a searching message once per second
+  if (!laserOn && millis() - lastSearching >= 1000) {
+    Serial.println("Searching beacon...");
+    lastSearching = millis();
   }
 }
