@@ -7,14 +7,27 @@ const unsigned long laserTimer = 2000;
 const int LASER_PIN = 12;  // change to whatever pin is actually connected
 
 //ir receiver
-int sensorPins[4] = { 8, 9, 10, 11 };
-int sensorLength = 4;
+const int SENSOR_PIN = 8;
+//int sensorLength = 4;
 
+//Spin Speed
+const int SPIN_SPEED = 80;
+
+//Countdown: if laser is on, but no beacon is found after 500ms (0.5s), turn off the laser
+const unsigned long COUNTDOWN_MS = 500;
+
+//last time seen the beacon
+unsigned long lastSeen = 0;
+
+//laser status (initially off)
+bool laserOn = false;
+
+/*
 enum State { scanning,
              aligning,
              firing };
 State laserState = scanning;
-
+*/
 // float targetAngle;
 // float laserAngle;
 // unsigned long holdStartTime;
@@ -24,15 +37,36 @@ void setup() {
 
   pinMode(LASER_PIN, OUTPUT);
   pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(SENSOR_PIN, INPUT_PULLUP);
 
   setupMotor();  // handles motorPWM/motorDirection/encoder pinMode + attachInterrupt, defined in motor_control.cpp
 
-  for (int i = 0; i < sensorLength; i++) {
-    pinMode(sensorPins[i], INPUT_PULLUP);
-  }
+  digitalWrite(LASER_PIN, LOW);
+  digitalWrite(LED_BUILTIN, LOW);
+
+  //start spinning slowly in ONE direction and never stop
+  motorForward(SPIN_SPEED);
 }
 //---------------------------------------------------------------------------------------------------------
 void loop() {
+  if(sawBeacon(SENSOR_PIN)){
+    lastSeen = millis();
+  }
+
+  bool shouldBeOn = (lastSeen != 0) && (millis() - lastSeen < COUNTDOWN_MS);
+
+  if (shouldBeOn && !laserOn) {
+    digitalWrite(LASER_PIN, HIGH);
+    digitalWrite(LED_BUILTIN, HIGH);
+    Serial.println("Beacon in range - laser ON");
+    laserOn = true;
+  }else if (!shouldBeOn && laserOn){
+    digitalWrite(LASER_PIN, LOW);
+    digitalWrite(LED_BUILTIN, LOW);
+    Serial.println("Beacon lost - laser OFF");
+    laserOn = false;
+  }
+  /*
   switch (laserState) {
 
     case scanning:
@@ -53,6 +87,7 @@ void loop() {
         break;
       }
   }
+      */
 }
 //---------------------------------------------------------------------------------------------------------
 void fireLaser() {
@@ -65,7 +100,7 @@ void handleScanning() {
   int hitSensor = -1;
 
   for (int i = 0; i < sensorLength; i++) {
-    if (sawBeacon(sensorPins[i])) {
+    if (sawBeacon(SENSOR_PIN[i])) {
       hitSensor = i;
       break;
     }
