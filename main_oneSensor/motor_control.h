@@ -3,12 +3,12 @@
 
 #include <Arduino.h>
 
-extern volatile long encoderCount;
+extern volatile long pos;
 
 void motorForward(int speedValue);
 void motorReverse(int speedValue);
 void motorStop();
-void turnAngle(float angle);
+void turnAngle(float angle, int speedValue);
 void rotateTo(float angle);
 bool isAtTarget();
 void setupMotor(); 
