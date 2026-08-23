@@ -18,6 +18,12 @@ const unsigned long COUNTDOWN_MS = 500;
 //last time seen the beacon
 unsigned long lastSeen = 0;
 
+//when beacon was first detected
+unsigned long firstSeen = 0;
+
+//wait this long before firing (2s)
+const unsigned long FIRE_DELAY_MS = 2000;
+
 //laser status (initially off)
 bool laserOn = false;
 
@@ -39,21 +45,32 @@ void setup() {
 }
 //---------------------------------------------------------------------------------------------------------
 void loop() {
-  if(sawBeacon(SENSOR_PIN)){
+  if (sawBeacon(SENSOR_PIN)) {
     lastSeen = millis();
+    if (firstSeen == 0) {
+      firstSeen = millis();
+    }
   }
 
-  bool shouldBeOn = (lastSeen != 0) && (millis() - lastSeen < COUNTDOWN_MS);
+  bool beaconPresent = (lastSeen != 0) && (millis() - lastSeen < COUNTDOWN_MS);
+  bool delayElapsed = (firstSeen != 0) && (millis() - firstSeen >= FIRE_DELAY_MS);
+
+  bool shouldBeOn = beaconPresent && delayElapsed;
 
   if (shouldBeOn && !laserOn) {
     digitalWrite(LASER_PIN, HIGH);
     digitalWrite(LED_BUILTIN, HIGH);
     Serial.println("Beacon in range - laser ON");
     laserOn = true;
-  }else if (!shouldBeOn && laserOn){
+  } else if (!beaconPresent && laserOn) {
     digitalWrite(LASER_PIN, LOW);
     digitalWrite(LED_BUILTIN, LOW);
     Serial.println("Beacon lost - laser OFF");
     laserOn = false;
+    // reset so next detection starts fresh delay
+    firstSeen = 0;
+  } else if (!beaconPresent && firstSeen != 0) {
+    // beacon lost before delay even finished
+    firstSeen = 0;
   }
 }
