@@ -42,8 +42,8 @@ void setup() {
   digitalWrite(LASER_PIN, LOW);
   digitalWrite(LED_BUILTIN, LOW);
 
-  //wait 30 seconds after power-up before spinning (with countdown)
-  for (int s = 30; s > 0; s--) {
+  //wait 15 seconds after power-up before spinning (with countdown)
+  for (int s = 15; s > 0; s--) {
     Serial.print("Starting in ");
     Serial.print(s);
     Serial.println(" s...");
