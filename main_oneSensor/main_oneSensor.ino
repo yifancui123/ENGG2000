@@ -9,7 +9,7 @@ const int SENSOR_PIN = 8;
 
 //Spin Speed
 const int SLOW_SPEED = 80;
-const int SCAN_SPEED = 150;
+const int SCAN_SPEED = 100;
 
 //How long the laser stays ON once it fires (5s for now)
 const unsigned long LASER_ON_MS = 5000;
@@ -43,19 +43,43 @@ void setup() {
   digitalWrite(LED_BUILTIN, LOW);
 
   //wait 15 seconds after power-up before spinning (with countdown)
+  /*
   for (int s = 15; s > 0; s--) {
     Serial.print("Starting in ");
     Serial.print(s);
     Serial.println(" s...");
     delay(1000);
   }
-
+*/
   //start spinning slowly in ONE direction and never stop
-  motorForward(SCAN_SPEED);
+  //motorForward(SCAN_SPEED);
+
+  delay(10000);
+
+
+  
+}
+
+void freeze(int ms){
+  delay(ms);
 }
 //---------------------------------------------------------------------------------------------------------
 void loop() {
-  bool seeBeacon = sawBeacon(SENSOR_PIN);
+  int pulseLength = 100;
+  int pulseDelay = 10;
+  int firingTime = 2000;
+  motorForward(SCAN_SPEED);
+  delay(pulseLength);
+  motorStop();
+  bool seeBeacon = sawBeacon(pulseDelay, SENSOR_PIN);
+  if (seeBeacon){
+    digitalWrite(LASER_PIN, HIGH);
+    freeze(firingTime);
+    digitalWrite(LASER_PIN, LOW);
+  }else {
+    delay(pulseDelay);
+  }
+  return;
 
   //fast speed while searching; slow speed once locked on
   if (laserOn) {

@@ -25,6 +25,6 @@
 // #define TOLERANCE 60    // how far off is still OK (±)
 
 // Check ONE sensor. Returns true if it sees a real beacon burst.
-bool sawBeacon(int pin);
+bool sawBeacon(int millis_scanning, int pin);
 
 #endif
