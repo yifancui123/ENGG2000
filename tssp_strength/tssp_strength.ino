@@ -10,7 +10,7 @@
 int sensorPins[4] = {A2, A3, A4, A5};
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
 
   // TSSP58P38 has a push-pull output, so no INPUT_PULLUP needed.
   for (int i = 0; i < 4; i++) {
