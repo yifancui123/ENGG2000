@@ -13,7 +13,7 @@ bool sawBeacon(int millis_scanning, int pin) {
   // Step 1: wait for the pin to go LOW (a burst starting).
   // Give up after 12ms (longer than one 5ms beacon period) so we don't hang forever.
   while (digitalRead(pin) == HIGH) {  // find the burst
-    if (micros() - t0 > millis_scanning * 1000) return false;  // no burst arrived -> no beacon
+    if (micros() - t0 > (unsigned long)millis_scanning * 1000UL) return false;  // no burst arrived -> no beacon
   }
 
   // The beacon is CONSTANT for now, so simply seeing a burst = beacon found.
