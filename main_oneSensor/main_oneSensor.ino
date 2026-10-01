@@ -79,46 +79,46 @@ void loop() {
   }else {
     delay(pulseDelay);
   }
-  return;
-
-  //fast speed while searching; slow speed once locked on
-  if (laserOn) {
-    motorForward(SLOW_SPEED);
-  } else {
-    motorForward(SCAN_SPEED);
-  }
-
-  //start (or continue) the fire-delay countdown while the beacon is visible
-  if (seeBeacon && !laserOn) {
-    if (firstSeen == 0) {
-      firstSeen = millis();  // mark start of this detection window
-    }
-  } else if (!seeBeacon && !laserOn) {
-    firstSeen = 0;  // beacon lost before the delay finished - reset the window
-  }
-
-  bool delayElapsed = (firstSeen != 0) && (millis() - firstSeen >= FIRE_DELAY_MS);
-
-  if (seeBeacon && delayElapsed && !laserOn) {
-    digitalWrite(LASER_PIN, HIGH);
-    digitalWrite(LED_BUILTIN, HIGH);
-    Serial.println("Beacon found - laser ON");
-    laserOn = true;
-    laserStart = millis();
-  }
-
-  //turn the laser OFF after LASER_ON_MS
-  if (laserOn && millis() - laserStart >= LASER_ON_MS) {
-    digitalWrite(LASER_PIN, LOW);
-    digitalWrite(LED_BUILTIN, LOW);
-    Serial.println("Timer expired - laser OFF");
-    laserOn = false;
-    firstSeen = 0;  // reset so next detection starts a fresh delay
-  }
-
-  //while the laser is off, print a searching message once per second
-  if (!laserOn && millis() - lastSearching >= 1000) {
-    Serial.println("Searching beacon...");
-    lastSearching = millis();
-  }
 }
+
+//   //fast speed while searching; slow speed once locked on
+//   if (laserOn) {
+//     motorForward(SLOW_SPEED);
+//   } else {
+//     motorForward(SCAN_SPEED);
+//   }
+
+//   //start (or continue) the fire-delay countdown while the beacon is visible
+//   if (seeBeacon && !laserOn) {
+//     if (firstSeen == 0) {
+//       firstSeen = millis();  // mark start of this detection window
+//     }
+//   } else if (!seeBeacon && !laserOn) {
+//     firstSeen = 0;  // beacon lost before the delay finished - reset the window
+//   }
+
+//   bool delayElapsed = (firstSeen != 0) && (millis() - firstSeen >= FIRE_DELAY_MS);
+
+//   if (seeBeacon && delayElapsed && !laserOn) {
+//     digitalWrite(LASER_PIN, HIGH);
+//     digitalWrite(LED_BUILTIN, HIGH);
+//     Serial.println("Beacon found - laser ON");
+//     laserOn = true;
+//     laserStart = millis();
+//   }
+
+//   //turn the laser OFF after LASER_ON_MS
+//   if (laserOn && millis() - laserStart >= LASER_ON_MS) {
+//     digitalWrite(LASER_PIN, LOW);
+//     digitalWrite(LED_BUILTIN, LOW);
+//     Serial.println("Timer expired - laser OFF");
+//     laserOn = false;
+//     firstSeen = 0;  // reset so next detection starts a fresh delay
+//   }
+
+//   //while the laser is off, print a searching message once per second
+//   if (!laserOn && millis() - lastSearching >= 1000) {
+//     Serial.println("Searching beacon...");
+//     lastSearching = millis();
+//   }
+// }
