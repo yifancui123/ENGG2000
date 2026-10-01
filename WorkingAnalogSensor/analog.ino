@@ -11,7 +11,7 @@
 //
 // View in Serial Plotter (Tools -> Serial Plotter) at 115200 to see all four.
 
-const int POWER_PIN = 7;                  // shared VS for all 4 sensors
+const int POWER_PIN = 8;                  // shared VS for all 4 sensors
 int sensorPins[4] = {A0, A3, A4, A5};     // 0=front 1=right 2=back 3=left
 
 // ---- power-cycle timing: on/off twice per second (2 Hz) ----
