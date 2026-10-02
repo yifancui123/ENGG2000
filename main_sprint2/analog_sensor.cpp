@@ -14,7 +14,7 @@
 #include "Arduino.h"
 #include "analog_sensor.h"
 
-static const int POWER_PIN = 8;                  // shared VS for all sensors
+static const int POWER_PIN = 4;                  // shared VS for all sensors
 
 static const int sensorPins[sensorNum] = {A0};   // e.g. {A0, A3, A4, A5} for all four
 
@@ -47,7 +47,7 @@ void setupSensor() {
 
 // Reads the wired sensors one at a time (~50 ms each). Unwired slots stay 0.
 void readStrengths(unsigned long out[sensorNum]) {
-  for (int i = 0; i < 4; i++) out[i] = 0;          // default: unseen / not wired
+  for (int i = 0; i < sensorNum; i++) out[i] = 0;          // default: unseen / not wired
   for (int i = 0; i < sensorNum; i++) {
     out[i] = readStrengthOnce(POWER_PIN, sensorPins[i]);
   }

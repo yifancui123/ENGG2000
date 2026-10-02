@@ -57,7 +57,7 @@ void setup() {
   setupMotor();    // motor pins, driver enable, encoder interrupt (motor_control.cpp)
   setupSensor();   // power pin + sensor pins (analog_sensor.cpp)
 
-  delay(STARTUP_DELAY_MS);
+  //delay(STARTUP_DELAY_MS);
 }
 
 //---------------------------------------------------------------------------------------------------------
