@@ -1,5 +1,5 @@
 // MQ Sentinel - Sprint 2 main.ino
-// Loop: pulse motor -> stop -> read the sensors -> fire if the rule says so.
+// Loop (once per CYCLE_MS): motor burst -> stop -> read the sensors -> fire if the rule says so.
 
 #include "analog_sensor.h"
 #include "motor_control.h"
@@ -8,13 +8,15 @@
 const int LASER_PIN = 12;
 const unsigned long FIRING_MS = 2000;      // how long the laser stays on per shot
 
-// ---- motor pulse ----
+// ---- motor burst ----
 const int SCAN_SPEED = 100;                // PWM 0-255
-const int PULSE_MS   = 100;                // how long the motor runs each pulse
+const int PULSE_MS   = 40;                 // how long the motor runs each burst (smaller = finer step)
 const int SETTLE_MS  = 50;                 // let the turret stop moving before reading
+const unsigned long CYCLE_MS = 1000;       // one burst + one reading per second
 
 // ---- fire rule (TUNE THESE from the Serial Plotter values) ----
-const unsigned long FIRE_MIN_US = (ON_MS - 1)*1000;    // front pulse must be at least this wide (us)
+// Front pulse must fill at least 80% of the window (readings saturate near ON_MS*1000)
+const unsigned long FIRE_MIN_US = (unsigned long)ON_MS * 1000UL * 8 / 10;
 const unsigned long DOMINANCE_X = 2;       // front must be >= this many times any other sensor
 
 // ---- startup ----
@@ -60,7 +62,9 @@ void setup() {
 
 //---------------------------------------------------------------------------------------------------------
 void loop() {
-  // 1. motor pulse
+  unsigned long cycleStart = millis();
+
+  // 1. motor burst
   motorForward(SCAN_SPEED);
   delay(PULSE_MS);
   motorStop();
@@ -83,4 +87,8 @@ void loop() {
   if (shouldFire(strength)) {
     fireLaser();
   }
+
+  // 4. wait out the rest of the cycle
+  unsigned long elapsed = millis() - cycleStart;
+  if (elapsed < CYCLE_MS) delay(CYCLE_MS - elapsed);
 }
