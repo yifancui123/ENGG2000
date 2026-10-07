@@ -18,7 +18,7 @@ static const int POWER_PIN = 4;                  // shared VS for all sensors
 
 static const int sensorPins[sensorNum] = {A0};   // e.g. {A0, A3, A4, A5} for all four
 
-static const int OFF_MS = 25;   // powered OFF (resets the AGC)
+static const int OFF_MS = 380;   // powered OFF (resets the AGC)
 
 // One power-cycle on ONE sensor: LOW-pulse width (us) = strength, 0 if unseen.
 static unsigned long readStrengthOnce(int powerPin, int outPin) {

@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 static const int sensorNum = 1;                  // how many sensors are wired (1-4)
-static const int ON_MS  = 25;   // powered ON window
+static const int ON_MS  = 120;   // powered ON window
 void setupSensor();
 void readStrengths(unsigned long out[4]);
 
