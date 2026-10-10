@@ -10,7 +10,7 @@ const int turnSpeed = 150;
 float countsPerDegree = 700.0 / 360.0;
 volatile int pos = 0;
 
-const long MS_PER_SCHEDULED_INVERT = 200000;
+const long MS_PER_SCHEDULED_INVERT = 20000;
 long ms_at_last_scheduled_invert = 0;
 bool rotating_right = true;
 
