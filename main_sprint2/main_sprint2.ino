@@ -92,12 +92,12 @@ void loop() {
   // 1. motor burst (stall burst while stalling, normal scan otherwise)
   try_invert();
   if (isStalling) {
-    motorForward(STALL_SPEED);
+    motor_drive(STALL_SPEED);
     delay(STALL_PULSE_MS);
     motorStop();
     delay(STALL_SETTLE_MS);
   } else {
-    motorForward(SCAN_SPEED);
+    motor_drive(SCAN_SPEED);
     delay(PULSE_MS);
     motorStop();
     delay(SETTLE_MS);

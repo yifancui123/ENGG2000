@@ -10,8 +10,8 @@ const int turnSpeed = 150;
 float countsPerDegree = 700.0 / 360.0;
 volatile int pos = 0;
 
-#define seconds_to_ms(s) (s*1000)
-const long MS_PER_SCHEDULED_INVERT = seconds_to_ms(30);
+#define seconds_to_ms(s) ((s)*1000L)
+const long MS_PER_SCHEDULED_INVERT = seconds_to_ms(30L);
 long ms_at_last_scheduled_invert = 0;
 bool rotating_right = true;
 
@@ -24,6 +24,10 @@ void readEncoder() {
   }
 }
 
+void motor_drive(int speedValue){
+    if (rotating_right) motorForward(speedValue);
+    else motorReverse(speedValue);
+}
 void motorForward(int speedValue) {
   digitalWrite(motorDirection, HIGH);
   analogWrite(motorPWM, speedValue);

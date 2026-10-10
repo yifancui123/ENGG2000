@@ -9,6 +9,8 @@ extern long ms_at_last_scheduled_invert;
 extern bool rotating_right;
 
 
+// sets speed based on whether `rotating_right` is set
+void motor_drive(int speedValue);
 
 void motorForward(int speedValue);
 void motorReverse(int speedValue);
