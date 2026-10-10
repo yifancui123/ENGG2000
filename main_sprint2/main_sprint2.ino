@@ -9,7 +9,7 @@ const int LASER_PIN = 12;
 const unsigned long FIRING_MS = 2000;  // how long the laser stays on per shot
 
 // ---- motor bursts ----
-const int SCAN_SPEED = 255;       // PWM 0-255, normal scanning
+const int SCAN_SPEED = 150;       // PWM 0-255, normal scanning
 const int PULSE_MS   = 80;        // how long the motor runs each burst
 const int SETTLE_MS  = 20;        // let the turret stop moving before reading
 
