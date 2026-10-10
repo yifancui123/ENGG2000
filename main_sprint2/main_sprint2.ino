@@ -13,7 +13,7 @@ const int SCAN_SPEED = 150;       // PWM 0-255, normal scanning
 const int PULSE_MS   = 80;        // how long the motor runs each burst
 const int SETTLE_MS  = 20;        // let the turret stop moving before reading
 
-const int STALL_SPEED     = 255;  // used while stalling (after a shot)
+const int STALL_SPEED     = 150;  // used while stalling (after a shot)
 const int STALL_PULSE_MS  = 10;
 const int STALL_SETTLE_MS = 10;
 const unsigned long STALL_MS = FIRING_MS;   // how long the stall lasts
