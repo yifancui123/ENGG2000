@@ -9,11 +9,11 @@ const int LASER_PIN = 12;
 const unsigned long FIRING_MS = 2000;  // how long the laser stays on per shot
 
 // ---- motor bursts ----
-const int SCAN_SPEED = 100;       // PWM 0-255, normal scanning
-const int PULSE_MS   = 50;        // how long the motor runs each burst
-const int SETTLE_MS  = 60;        // let the turret stop moving before reading
+const int SCAN_SPEED = 150;       // PWM 0-255, normal scanning
+const int PULSE_MS   = 80;        // how long the motor runs each burst
+const int SETTLE_MS  = 20;        // let the turret stop moving before reading
 
-const int STALL_SPEED     = 100;  // used while stalling (after a shot)
+const int STALL_SPEED     = 150;  // used while stalling (after a shot)
 const int STALL_PULSE_MS  = 10;
 const int STALL_SETTLE_MS = 10;
 const unsigned long STALL_MS = FIRING_MS;   // how long the stall lasts
@@ -29,6 +29,8 @@ const char* SENSOR_NAMES[4] = { "Front", "Right", "Back", "Left" };
 
 // latest readings: 0 = front, 1 = right, 2 = back, 3 = left (only sensorNum used)
 unsigned long strength[sensorNum];
+
+int STARTUP_DELAY_MS = 5000;
 
 // laser state
 unsigned long ms_at_last_laser_fire = 0;
@@ -81,6 +83,8 @@ void setup() {
 
   setupMotor();   // motor pins, driver enable, encoder interrupt
   setupSensor();  // power pin + sensor pins
+
+  delay(STARTUP_DELAY_MS);
 }
 
 //---------------------------------------------------------------------------------------------------------
