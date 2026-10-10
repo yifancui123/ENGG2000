@@ -10,8 +10,8 @@ const unsigned long FIRING_MS = 2000;  // how long the laser stays on per shot
 
 // ---- motor bursts ----
 const int SCAN_SPEED = 150;       // PWM 0-255, normal scanning
-const int PULSE_MS   = 50;        // how long the motor runs each burst
-const int SETTLE_MS  = 50;        // let the turret stop moving before reading
+const int PULSE_MS   = 80;        // how long the motor runs each burst
+const int SETTLE_MS  = 20;        // let the turret stop moving before reading
 
 const int STALL_SPEED     = 150;  // used while stalling (after a shot)
 const int STALL_PULSE_MS  = 10;
@@ -90,14 +90,13 @@ void setup() {
 //---------------------------------------------------------------------------------------------------------
 void loop() {
   // 1. motor burst (stall burst while stalling, normal scan otherwise)
-  try_invert();
   if (isStalling) {
-    motor_drive(STALL_SPEED);
+    motorForward(STALL_SPEED);
     delay(STALL_PULSE_MS);
     motorStop();
     delay(STALL_SETTLE_MS);
   } else {
-    motor_drive(SCAN_SPEED);
+    motorForward(SCAN_SPEED);
     delay(PULSE_MS);
     motorStop();
     delay(SETTLE_MS);

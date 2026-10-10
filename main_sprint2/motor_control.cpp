@@ -10,11 +10,6 @@ const int turnSpeed = 150;
 float countsPerDegree = 700.0 / 360.0;
 volatile int pos = 0;
 
-#define seconds_to_ms(s) ((s)*1000L)
-const long MS_PER_SCHEDULED_INVERT = seconds_to_ms(30L);
-long ms_at_last_scheduled_invert = 0;
-bool rotating_right = true;
-
 void readEncoder() {
   int b = digitalRead(encoderB);
   if (b > 0) {
@@ -24,10 +19,6 @@ void readEncoder() {
   }
 }
 
-void motor_drive(int speedValue){
-    if (rotating_right) motorForward(speedValue);
-    else motorReverse(speedValue);
-}
 void motorForward(int speedValue) {
   digitalWrite(motorDirection, HIGH);
   analogWrite(motorPWM, speedValue);
@@ -81,16 +72,4 @@ void setupMotor() {
   pinMode(encoderB, INPUT);
   digitalWrite(sleep, HIGH);
   attachInterrupt(digitalPinToInterrupt(encoderA), readEncoder, RISING);
-}
-
-void invert_direction(){
-  rotating_right = !rotating_right;
-    ms_at_last_scheduled_invert = millis();
-}
-
-void try_invert(){
-  long ms_since_scheduled_invert = millis() - ms_at_last_scheduled_invert;
-  if (ms_since_scheduled_invert > MS_PER_SCHEDULED_INVERT){
-    invert_direction();
-  }
 }
