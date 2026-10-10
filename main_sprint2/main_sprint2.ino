@@ -8,14 +8,12 @@
 const int LASER_PIN = 12;
 const unsigned long FIRING_MS = 2000;  // how long the laser stays on per shot
 
-// ---- motor bursts ----
-const int SCAN_SPEED = 150;       // PWM 0-255, normal scanning
-const int PULSE_MS   = 80;        // how long the motor runs each burst
-const int SETTLE_MS  = 20;        // let the turret stop moving before reading
+// ---- motor steps (closed loop on the encoder) ----
+const int   SCAN_SPEED    = 150;  // max PWM 0-255, normal scanning
+const float SCAN_STEP_DEG = 10.0; // turret rotation per step
 
-const int STALL_SPEED     = 150;  // used while stalling (after a shot)
-const int STALL_PULSE_MS  = 10;
-const int STALL_SETTLE_MS = 10;
+const int   STALL_SPEED    = 150; // used while stalling (after a shot)
+const float STALL_STEP_DEG = 1.0; // creep slowly while the laser is on
 const unsigned long STALL_MS = FIRING_MS;   // how long the stall lasts
 
 // ---- fire rule ----
@@ -89,17 +87,12 @@ void setup() {
 
 //---------------------------------------------------------------------------------------------------------
 void loop() {
-  // 1. motor burst (stall burst while stalling, normal scan otherwise)
+  // 1. motor step (small step while stalling, normal scan otherwise).
+  //    Returns once the encoder says we're there and stopped.
   if (isStalling) {
-    motorForward(STALL_SPEED);
-    delay(STALL_PULSE_MS);
-    motorStop();
-    delay(STALL_SETTLE_MS);
+    stepDegrees(STALL_STEP_DEG, STALL_SPEED);
   } else {
-    motorForward(SCAN_SPEED);
-    delay(PULSE_MS);
-    motorStop();
-    delay(SETTLE_MS);
+    stepDegrees(SCAN_STEP_DEG, SCAN_SPEED);
   }
 
   // 2. look (~50 ms per sensor)

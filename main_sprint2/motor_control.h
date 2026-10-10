@@ -3,13 +3,16 @@
 
 #include <Arduino.h>
 
-extern volatile int pos;
+extern volatile long pos;
 
 void motorForward(int speedValue);
 void motorReverse(int speedValue);
 void motorStop();
+long readPos();
+bool moveTo(long target, int maxSpeed, unsigned long timeoutMs);
+bool stepDegrees(float angle, int maxSpeed);
 void turnAngle(float angle, int speedValue);
 void rotateTo(float angle);
 bool isAtTarget();
-void setupMotor(); 
+void setupMotor();
 #endif
