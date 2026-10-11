@@ -4,6 +4,11 @@
 #include "analog_sensor.h"
 #include "motor_control.h"
 
+static constexpr int SENSOR_COUNT = 1;
+AnalogueSensor sensors[SENSOR_COUNT] = {
+    {"Front",A0},
+};
+
 // ---- laser ----
 const int LASER_PIN = 12;
 const unsigned long FIRING_MS = 2000;  // how long the laser stays on per shot
@@ -18,15 +23,13 @@ const unsigned long STALL_MS = FIRING_MS;   // how long the stall lasts
 
 // ---- fire rule ----
 // Front pulse must fill at least 80% of the window (readings saturate near ON_MS*1000)
-const unsigned long FIRE_MIN_US = (unsigned long)ON_MS * 1000UL * 8 / 10;
+const unsigned long FIRE_MIN_US = (unsigned long)AnalogueSensor::ON_MS * 1000UL * 8 / 10;
 const unsigned long DOMINANCE_X = 2;  // front must be >= this many times any other sensor
 
 // ---- debug printing ----
 const bool DEBUG = true;
-const char* SENSOR_NAMES[4] = { "Front", "Right", "Back", "Left" };
 
 // latest readings: 0 = front, 1 = right, 2 = back, 3 = left (only sensorNum used)
-unsigned long strength[sensorNum];
 
 int STARTUP_DELAY_MS = 5000;
 
@@ -39,11 +42,11 @@ unsigned long ms_at_stall_begin = 0;
 bool isStalling = false;
 
 //---------------------------------------------------------------------------------------------------------
-bool shouldFire(const unsigned long s[sensorNum]) {
-  if (s[0] < FIRE_MIN_US) return false;           // front sees nothing/too weak
+bool shouldFire(const int SENSOR_COUNT, const AnalogueSensor s[]) {
+  if (s[0].strength < FIRE_MIN_US) return false;           // front sees nothing/too weak
 
-  for (int i = 1; i < sensorNum; i++) {           // skipped when only 1 sensor
-    if (s[0] < s[i] * DOMINANCE_X) return false;  // another side is as strong
+  for (int i = 1; i < SENSOR_COUNT; i++) {           // skipped when only 1 sensor
+    if (s[0].strength < s[i].strength * DOMINANCE_X) return false;  // another side is as strong
   }
   return true;
 }
@@ -80,7 +83,9 @@ void setup() {
   digitalWrite(LASER_PIN, LOW);
 
   setupMotor();   // motor pins, driver enable, encoder interrupt
-  setupSensor();  // power pin + sensor pins
+    for (auto & sensor: sensors){
+        sensor.setup_sensor();  // power pin + sensor pins
+    }
 
   delay(STARTUP_DELAY_MS);
 }
@@ -95,21 +100,17 @@ void loop() {
     stepDegrees(SCAN_STEP_DEG, SCAN_SPEED);
   }
 
-  // 2. look (~50 ms per sensor)
-  readStrengths(strength);
+    // 2. look (~50 ms per sensor)
+    for (auto & sensor: sensors){
+        sensor.read_strength(); 
+    }
 
   if (DEBUG) {
-    for (int i = 0; i < sensorNum; i++) {
-      if (i > 0) Serial.print("\t");
-      Serial.print(SENSOR_NAMES[i]);
-      Serial.print(":");
-      Serial.print(strength[i]);
-    }
-    Serial.println();
+        AnalogueSensor::debug_print_strength_graphs(SENSOR_COUNT, sensors);
   }
 
   // 3. decide
-  if (shouldFire(strength)) {
+  if (shouldFire(SENSOR_COUNT, sensors)) {
     fireLaser();
     beginStall();
   }
