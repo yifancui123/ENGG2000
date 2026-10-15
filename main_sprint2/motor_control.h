@@ -12,4 +12,5 @@ void turnAngle(float angle, int speedValue);
 void rotateTo(float angle);
 bool isAtTarget();
 void setupMotor(); 
+void brakeHold(unsigned long maxMs);
 #endif
