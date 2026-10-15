@@ -89,6 +89,7 @@ void setup() {
 
 //---------------------------------------------------------------------------------------------------------
 void loop() {
+  /*
   // 1. motor burst (stall burst while stalling, normal scan otherwise)
   if (isStalling) {
     motorForward(STALL_SPEED);
@@ -122,4 +123,12 @@ void loop() {
   }
   updateLaser();
   updateStall();
+  */
+  Serial.println("spin...");
+  motorForward(SCAN_SPEED);
+  delay(400);
+  Serial.println("brake..");
+  brakeHold(3000);
+  Serial.print("done, rest 2s");
+  delay(2000);
 }
