@@ -17,15 +17,21 @@ Bench tests used the motor clamped on the bench, with the 100 mm steel flywheel 
 | Forward | 17.3 (17–18) | 9.0 |
 | Reverse | 17.0 (15–18) | 8.0 |
 
+![Deadband](deadband.png)
+
 ## Step response and stopping (`step_*.csv`, `step_responses.png`)
 - Time constant **τ ≈ 0.085 s** (0.078–0.098).
 - Brake stops the wheel in **0.15–0.19 s**; coasting takes 0.91 s (from PWM 150) to 1.35 s (from PWM 255).
 - After braking, the wheel still slides about **speed (counts/s) × 0.053 s**: 162 counts from PWM 100, up to 474 counts (61° of wheel) from PWM 255.
 
+![Step responses](step_responses.png)
+
 ## Speed curve (`speed_curve.csv`, `speed_curve.png`)
 - Forward: rpm = 0.699 × PWM − 3.1, max 175 rpm.
 - Reverse: rpm = 0.753 × PWM + 4.7, max 187 rpm.
 - Speed is linear in PWM. Reverse is about 7% stronger.
+
+![Speed curve](speed_curve.png)
 
 ## Starting PD gains (simulated with the numbers above)
 Wheel position PD, 5 ms loop: **Kp = 1.0** PWM per count, **Kd = 0.05** PWM per (count/s).
@@ -41,6 +47,8 @@ In the simulation, a one-revolution move overshoots by 16 counts and settles wit
   - an outside kick (a touch, a tug on a wire, or the swivel slipping), with the near-frictionless swivel keeping it spinning; or
   - the wheel creeping when it should have been braked (an electrical fault).
 - **To be checked in run 2**, with the encoder readout.
+
+![Body rotation, run 1](satellite_run1/body_rotation.png)
 
 ## Hardware status
 After run 1 the motor stopped working. The previous Nano had a fried capacitor, and the new Nano went into the same breadboard, which showed signs of leaked electrolyte. Before any more testing: replace the breadboard, check that the battery feeds VIN (not the 5V pin) with the right polarity, then check the driver.

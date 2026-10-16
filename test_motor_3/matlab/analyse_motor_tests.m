@@ -72,7 +72,7 @@ f = fullfile(datadir, "speed_curve.csv");
 if isfile(f)
     T = readtable(f, "CommentStyle", "#");
     fig = figure("Name", "Speed curve", "Color", "w"); light(fig); hold on
-    plot(T.pwm, T.rpm, "o-", "LineWidth", 1.5, "DisplayName", "measured");
+    plot(T.pwm, T.rpm, "o", "LineWidth", 1.5, "DisplayName", "measured");   % markers only: no line across the gap at 0
     out(end + 1) = "";
     out(end + 1) = "SPEED CURVE (straight-line fit where the wheel turns)";
     for s = [1, -1]
@@ -83,7 +83,8 @@ if isfile(f)
             ternary(s > 0, "forward", "reverse"), c(1), c(2), -c(2) / c(1), ...
             max(abs(r.rpm))); %#ok<AGROW>
         p = linspace(min(r.pwm), max(r.pwm), 50);
-        plot(p, polyval(c, p), "--", "DisplayName", "fit " + ternary(s > 0, "fwd", "rev"));
+        plot(p, polyval(c, p), "--", "LineWidth", 1.5, ...
+            "DisplayName", sprintf("fit %s: %.3f rpm/PWM", ternary(s > 0, "fwd", "rev"), c(1)));
     end
     xlabel("PWM (signed)"); ylabel("Steady wheel speed (rpm)");
     title("Wheel speed vs PWM", "FontWeight", "normal");
