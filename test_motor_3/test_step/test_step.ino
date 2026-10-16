@@ -9,11 +9,10 @@
 // PWM 255 gives the maximum speed on the current battery voltage.
 // Easiest: let MATLAB run it (matlab/run_motor_tests.m) so logs save as CSV.
 
+#include "driver.h"
+
 const int PIN_ENC_A = 2;
 const int PIN_ENC_B = 3;
-const int PIN_EN    = 5;
-const int PIN_PH    = 6;
-const int PIN_SLEEP = 7;
 
 const unsigned long LOG_US   = 5000;   // 5 ms sample period
 const unsigned long T_REST   = 200;    // ms before the step
@@ -37,22 +36,6 @@ long readCount() {
   interrupts();
   return c;
 }
-
-void wake() {
-  if (digitalRead(PIN_SLEEP) == LOW) {
-    digitalWrite(PIN_SLEEP, HIGH);
-    delay(2);                                 // DRV8874 wake-up time
-  }
-}
-
-void drive(int pwm) {
-  wake();
-  digitalWrite(PIN_PH, pwm >= 0 ? HIGH : LOW);
-  analogWrite(PIN_EN, constrain(abs(pwm), 0, 255));
-}
-
-void brake() { wake(); analogWrite(PIN_EN, 0); }                     // outputs low
-void coast() { analogWrite(PIN_EN, 0); digitalWrite(PIN_SLEEP, LOW); } // outputs off
 
 void runStep(int pwm, bool useCoast) {
   Serial.print(F("# step pwm=")); Serial.print(pwm);
@@ -88,13 +71,9 @@ void runStep(int pwm, bool useCoast) {
 
 void setup() {
   Serial.begin(115200);
-  pinMode(PIN_EN, OUTPUT);
-  pinMode(PIN_PH, OUTPUT);
-  pinMode(PIN_SLEEP, OUTPUT);
+  driverBegin();
   pinMode(PIN_ENC_A, INPUT);
   pinMode(PIN_ENC_B, INPUT);
-  digitalWrite(PIN_SLEEP, HIGH);
-  brake();
   prevAB = ((PIND >> 2) & 1) << 1 | ((PIND >> 3) & 1);
   attachInterrupt(digitalPinToInterrupt(PIN_ENC_A), encoderISR, CHANGE);
   attachInterrupt(digitalPinToInterrupt(PIN_ENC_B), encoderISR, CHANGE);
@@ -108,6 +87,11 @@ void loop() {
   if (cmd.length() == 0) return;
   bool useCoast = (cmd[0] == 'c');
   if (useCoast) cmd.remove(0, 1);
+  if (driverMode < 0) {
+    Serial.println(F("# motor disabled: upload test_driver_mode and send 'd' first"));
+    Serial.println(F("# end"));
+    return;
+  }
   int pwm = constrain(cmd.toInt(), -255, 255);
   if (pwm != 0) runStep(pwm, useCoast);
 }

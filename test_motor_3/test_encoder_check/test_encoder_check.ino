@@ -4,18 +4,22 @@
 //   z  -> zero the count
 //   f  -> short forward pulse  (PWM 100 for 300 ms)
 //   r  -> short reverse pulse
+//   1  -> motor turns the wheel ONE revolution (2800 counts) and stops
 //
-// 1. Put a tape mark on the flywheel. Send 'z'.
-// 2. Turn the flywheel by hand exactly 5 full turns (slowly).
-// 3. counts / 5 = counts per rev. Expect ~2800 (700 x 4: every edge on A and B).
-// 4. Send 'f': the count should go UP. If it goes down, note it -
-//    the other sketches print FORWARD_SIGN so you can flip it there.
+// No need to touch the flywheel - the motor does all the turning.
+// 1. Send 'f' and 'r' a few times. 'f' should move a clearly POSITIVE count
+//    (hundreds or more), 'r' a similar negative one. If 'f' goes negative,
+//    swap the D2 and D3 wires. If the wheel spins but the count stays near 0,
+//    one encoder wire is loose.
+// 2. Battery off, put a tape mark on the flywheel rim and one on the frame
+//    next to it. Battery on, hands clear, send '1'. The marks should line up
+//    again; the sketch prints how far past the start mark it should stop.
+// Needs the driver mode saved by test_driver_mode (run that first).
+
+#include "driver.h"
 
 const int PIN_ENC_A = 2;
 const int PIN_ENC_B = 3;
-const int PIN_EN    = 5;   // DRV8874 EN (PWM)
-const int PIN_PH    = 6;   // DRV8874 PH (direction)
-const int PIN_SLEEP = 7;   // DRV8874 nSLEEP
 
 volatile long count = 0;
 volatile uint8_t prevAB = 0;
@@ -34,32 +38,74 @@ long readCount() {
   return c;
 }
 
-void drive(int pwm) {                       // signed PWM, -255..255
-  digitalWrite(PIN_PH, pwm >= 0 ? HIGH : LOW);
-  analogWrite(PIN_EN, constrain(abs(pwm), 0, 255));
-}
+const long ONE_REV = 2800;                  // 700 x 4 (datasheet) - what we check
 
-void brake() { analogWrite(PIN_EN, 0); }    // DRV8874 PH/EN: EN low = brake
+// Turn the wheel one revolution under motor power, then report where it stopped.
+// Fast (PWM 120) for the first 3/4 rev, slow (PWM 70) for the last 1/4 so it
+// doesn't overshoot much. If the wheel stalls, the PWM is raised 10 at a time.
+void moveOneRev() {
+  Serial.println(F("# moving one revolution..."));
+  long start = readCount();
+  long lastMoved = 0;
+  int boost = 0;
+  unsigned long t0 = millis(), lastChange = millis();
+
+  while (true) {
+    long moved = readCount() - start;
+    if (moved >= ONE_REV) break;
+    if (moved < -50) {
+      brake();
+      Serial.println(F("# STOPPED: count went DOWN while driving forward - swap D2 and D3"));
+      return;
+    }
+    if (millis() - t0 > 10000) {
+      brake();
+      Serial.print(F("# STOPPED: timed out after 10 s, moved only "));
+      Serial.print(moved); Serial.println(F(" counts - check battery and encoder"));
+      return;
+    }
+    if (moved != lastMoved) {
+      lastMoved = moved;
+      lastChange = millis();
+    } else if (millis() - lastChange > 200 && boost < 100) {
+      boost += 10;                          // stalled: push a bit harder
+      lastChange = millis();
+    }
+    int pwm = (ONE_REV - moved > ONE_REV / 4) ? 120 : 70;
+    drive(min(pwm + boost, 220));
+  }
+  brake();
+  delay(1000);                              // let the flywheel settle
+
+  long moved = readCount() - start;
+  float pastDeg = (moved - ONE_REV) * 360.0 / ONE_REV;
+  float pastMm  = pastDeg / 360.0 * PI * 100.0;   // 100 mm flywheel rim
+  Serial.print(F("# moved ")); Serial.print(moved);
+  Serial.print(F(" counts. If 2800 is right, the tape mark is "));
+  Serial.print(pastDeg, 1); Serial.print(F(" deg ("));
+  Serial.print(pastMm, 0); Serial.println(F(" mm at the rim) PAST the frame mark."));
+}
 
 void setup() {
   Serial.begin(115200);
-  pinMode(PIN_EN, OUTPUT);
-  pinMode(PIN_PH, OUTPUT);
-  pinMode(PIN_SLEEP, OUTPUT);
+  driverBegin();
   pinMode(PIN_ENC_A, INPUT);
   pinMode(PIN_ENC_B, INPUT);
-  digitalWrite(PIN_SLEEP, HIGH);
-  brake();
   prevAB = ((PIND >> 2) & 1) << 1 | ((PIND >> 3) & 1);
   attachInterrupt(digitalPinToInterrupt(PIN_ENC_A), encoderISR, CHANGE);
   attachInterrupt(digitalPinToInterrupt(PIN_ENC_B), encoderISR, CHANGE);
-  Serial.println(F("# encoder check: z=zero, f=forward pulse, r=reverse pulse"));
+  Serial.println(F("# encoder check: z=zero, f=forward pulse, r=reverse pulse, 1=one revolution"));
 }
 
 void loop() {
   if (Serial.available()) {
     char c = Serial.read();
     if (c == 'z') { noInterrupts(); count = 0; interrupts(); }
+    if ((c == '1' || c == 'f' || c == 'r') && driverMode < 0) {
+      Serial.println(F("# motor disabled: upload test_driver_mode and send 'd' first"));
+      return;
+    }
+    if (c == '1') moveOneRev();
     if (c == 'f' || c == 'r') {
       long before = readCount();
       drive(c == 'f' ? 100 : -100);

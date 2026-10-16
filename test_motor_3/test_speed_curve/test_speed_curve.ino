@@ -4,11 +4,10 @@
 // flywheel to reach speed, then measures counts over 1.0 s.
 // Prints CSV: pwm,rpm (pwm is signed). Takes ~1.5 minutes.
 
+#include "driver.h"
+
 const int PIN_ENC_A = 2;
 const int PIN_ENC_B = 3;
-const int PIN_EN    = 5;
-const int PIN_PH    = 6;
-const int PIN_SLEEP = 7;
 
 const float COUNTS_PER_REV = 2800.0;   // 700 x 4 - confirm with test_encoder_check
 const int   PWM_LEVELS[]   = {40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 255};
@@ -33,22 +32,15 @@ long readCount() {
   return c;
 }
 
-void drive(int pwm) {
-  digitalWrite(PIN_PH, pwm >= 0 ? HIGH : LOW);
-  analogWrite(PIN_EN, constrain(abs(pwm), 0, 255));
-}
-
-void brake() { analogWrite(PIN_EN, 0); }
-
 void setup() {
   Serial.begin(115200);
-  pinMode(PIN_EN, OUTPUT);
-  pinMode(PIN_PH, OUTPUT);
-  pinMode(PIN_SLEEP, OUTPUT);
+  if (!driverBegin()) {
+    Serial.println(F("# motor disabled: upload test_driver_mode and send 'd' first"));
+    Serial.println(F("# end"));
+    return;
+  }
   pinMode(PIN_ENC_A, INPUT);
   pinMode(PIN_ENC_B, INPUT);
-  digitalWrite(PIN_SLEEP, HIGH);
-  brake();
   prevAB = ((PIND >> 2) & 1) << 1 | ((PIND >> 3) & 1);
   attachInterrupt(digitalPinToInterrupt(PIN_ENC_A), encoderISR, CHANGE);
   attachInterrupt(digitalPinToInterrupt(PIN_ENC_B), encoderISR, CHANGE);

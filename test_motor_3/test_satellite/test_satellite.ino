@@ -14,12 +14,10 @@
 // Inertia ratio: body angle (phone) / wheel angle (counts / 2800 * 360)
 
 #include <EEPROM.h>
+#include "driver.h"
 
 const int PIN_ENC_A = 2;
 const int PIN_ENC_B = 3;
-const int PIN_EN    = 5;
-const int PIN_PH    = 6;
-const int PIN_SLEEP = 7;
 const int PIN_LED   = 13;
 
 const int   N_MOVES    = 6;
@@ -50,13 +48,6 @@ long readCount() {
   return c;
 }
 
-void drive(int pwm) {
-  digitalWrite(PIN_PH, pwm >= 0 ? HIGH : LOW);
-  analogWrite(PIN_EN, constrain(abs(pwm), 0, 255));
-}
-
-void brake() { analogWrite(PIN_EN, 0); }
-
 void printResults() {
   Result r;
   EEPROM.get(0, r);
@@ -77,14 +68,12 @@ void printResults() {
 
 void setup() {
   Serial.begin(115200);
-  pinMode(PIN_EN, OUTPUT);
-  pinMode(PIN_PH, OUTPUT);
-  pinMode(PIN_SLEEP, OUTPUT);
   pinMode(PIN_LED, OUTPUT);
+  if (!driverBegin()) {             // mode not saved: fast blink, never run
+    while (true) { digitalWrite(PIN_LED, !digitalRead(PIN_LED)); delay(80); }
+  }
   pinMode(PIN_ENC_A, INPUT);
   pinMode(PIN_ENC_B, INPUT);
-  digitalWrite(PIN_SLEEP, HIGH);
-  brake();
   prevAB = ((PIND >> 2) & 1) << 1 | ((PIND >> 3) & 1);
   attachInterrupt(digitalPinToInterrupt(PIN_ENC_A), encoderISR, CHANGE);
   attachInterrupt(digitalPinToInterrupt(PIN_ENC_B), encoderISR, CHANGE);
