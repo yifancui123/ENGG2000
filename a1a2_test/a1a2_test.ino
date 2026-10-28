@@ -76,7 +76,8 @@ void setup() {
   pinMode(OUT_L, INPUT);
   pinMode(OUT_R, INPUT);
   delay(300);
-  Serial.println(F("# A1/A2 fine-aim test. diff = L-R (dir), sum = L+R (strength)."));
+  Serial.println(F("# A0/A1 fine-aim test. A0 = left (pin A0), A1 = right (pin A1)."));
+  Serial.println(F("# diff = L-R, e = (L-R)/(L+R). SAT = a sensor hit the 120 ms ceiling."));
 }
 
 void loop() {
@@ -90,10 +91,16 @@ void loop() {
   bool strong   = (sL > LOCK_MIN && sR > LOCK_MIN);
   bool lockFire = centered && strong;
 
-  Serial.print(F("L="));    Serial.print(sL);
-  Serial.print(F(" R="));   Serial.print(sR);
-  Serial.print(F(" diff=")); Serial.print(diff);
-  Serial.print(F(" sum="));  Serial.print(sum);
+  // normalized error: distance-independent, 0 when both equal
+  float e   = (sum > 0) ? (float)diff / (float)sum : 0.0;
+  bool  sat = (sL >= 119000UL || sR >= 119000UL);
+
+  Serial.print(F("A0(L)="));   Serial.print(sL);
+  Serial.print(F("  A1(R)=")); Serial.print(sR);
+  Serial.print(F("  diff="));  Serial.print(diff);
+  Serial.print(F("  e="));     Serial.print(e, 4);
+  if (sat) Serial.print(F("  SAT"));
+
   Serial.print(diff >  CENTER_TOL ? F("  -> LEFT")
              : diff < -CENTER_TOL ? F("  -> RIGHT")
              :                      F("  -> CENTERED"));
