@@ -50,7 +50,7 @@ const bool AUTO_90 = false;
 const bool AUTO_45 = false;
 const bool AUTO_SWEEP = false;
 const bool AUTO_TEST = false;
-const bool AUTO_HOLD = true;
+const bool AUTO_HOLD = false;
 const bool USE_GYRO = true;
 const bool STEADY_ON = true;
 // After each AUTO_90/45 turn, hold at this rate (deg/s, minus the drift you

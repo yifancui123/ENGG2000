@@ -81,20 +81,20 @@ void loop() {
 | `steadyStart()` / `steadyStartAt(angle)` | Hold where it is / at a given gyro angle |
 | `steadyHoldAngle()`, `steadyDrift()`, `steadyCorrection()` | For logging |
 
-What `steadyTurnBy` does:
+What `steadyTurnBy` does (`HOLD_MODE = HOLD_PULSE`, the final setting):
 0. **TURNING** - `turnBy(deg)` on the encoder; target = gyro angle now + deg
 1. **SETTLE** 0.1 s - turn finished, wheel braked
-2. **MEASURE** 0.3 s - gyro measures the body drift rate
-3. **CANCEL** 0.15 s - wheel set to the speed that cancels that drift
-4. **RETURN** up to 1.5 s - turn back onto the target
-5. **READY** - holding on the target
+2. **RETURN** - if more than 0.5 deg off the target, a small `turnBy` back
+   + brake (a pulse); READY once inside 0.5 deg (max 1.5 s)
+3. **READY** - holding on the target. Keeps checking the gyro: more than
+   0.5 deg off -> pulse back, wait 0.1 s, check again. Wheel braked in between.
 
-With `CONTINUOUS = true` (top of `steady.cpp`, the default) steps 4 and 5
-keep correcting the wheel speed from the gyro every 20 ms (angle + rate,
-with the wheel speed as the integral), so a suspension wire that twists
-back is fought for the whole hold. `false` = measure once, one speed, one
-nudge. Limit: if something keeps pushing for long, the wheel reaches top
-speed (~64 rpm) and can't hold any more.
+Other modes in `steady.cpp` (tested, not used): `HOLD_CONTINUOUS` (measure
+the drift, then a gyro angle/rate cascade adjusting the wheel speed every
+10 ms; zigzagged on our rig without more tuning) and `HOLD_ONCE` (measure
+the drift once, one cancelling speed). Limit of pulses: they correct the
+angle but can't cancel a push that keeps building (a twisted suspension
+wire / seized swivel), so the swivel must turn freely.
 
 ### gyro
 | Function | What it does |
@@ -145,8 +145,9 @@ and Nano VIN, all GNDs joined. Gyro AD0, INT, XDA, XCL: leave unconnected.
 | `kp`, `kd` | motor.cpp | 1.0, 0.05 | wheel PD gains |
 | `MAX_PWM` | motor.cpp | 100 | top speed during a turn (~70 rpm wheel, ~60 deg/s body) |
 | `GYRO_SIGN` | gyro.cpp | +1 | anticlockwise = +. **Confirmed.** |
-| `CONTINUOUS` | steady.cpp | true | gyro hold keeps correcting |
-| `ANGLE_GAIN`, `RATE_GAIN` | steady.cpp | 3.0, 0.15 | hold gains. Wobbles: RATE_GAIN 0.08. Creeps: ANGLE_GAIN 5. |
+| `HOLD_MODE` | steady.cpp | `HOLD_PULSE` | how the target is held (final) |
+| `PULSE_DEAD` | steady.cpp | 0.5 deg | no pulse inside this (bullseye is 2.3 deg) |
+| `PULSE_GAP_MS` | steady.cpp | 100 ms | wait after a pulse before checking again |
 
 If turns end short, `R_RATIO` is too big (and the other way). Example:
 4 x 90 deg ends 10 deg short of 360 -> new r = 0.14 x 350 / 360.
@@ -166,11 +167,11 @@ flag false, upload, type `p`:
 - `AUTO_TEST`: 14 turns (90 down to 1 deg, both ways), 2 s hold each
 - `AUTO_90` / `AUTO_45` / `AUTO_SWEEP`: older encoder-only tests
 
-## Status (2026-11-01)
+## Status (2026-11-02, final)
 - Done on the satellite: driver, `turnBy(90)` direction, gyro wiring and
-  sign, gyro drift while still (no creep).
-- Being tested: the steady hold over 10 s (`AUTO_HOLD`), small turns
-  (1-10 deg) and the full `AUTO_TEST`. Numbers may be tuned; function names
-  won't change.
+  sign, gyro drift while still (no creep), 90 deg turn + 10 s pulse hold
+  (`AUTO_HOLD`, looked good by eye).
+- Hold methods compared on the hanging satellite: measure-once (lost it
+  after ~2 s to the wire), continuous (zigzag), pulses (best) -> pulses final.
 - A stiff suspension wire / seized swivel makes the body spin back after a
-  turn. The continuous hold fights it, but a free swivel is the real fix.
+  turn. Pulses keep correcting, but a free swivel is the real fix.

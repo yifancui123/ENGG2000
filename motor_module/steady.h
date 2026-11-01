@@ -7,10 +7,10 @@
 //   4. RETURN   turn the body onto the target angle (fixes turn error AND
 //               the angle lost while measuring)
 //   5. READY    holding on the target -> fire the laser
-// With CONTINUOUS = true (steady.cpp) steps 4 and 5 keep correcting the
-// wheel speed with the gyro every 20 ms, so a wire that twists back is
-// fought for the whole hold. steadyStop() + the next steadyTurnBy()
-// clears it and the next target measures again.
+// HOLD_MODE (steady.cpp) picks how steps 2-5 hold the target: HOLD_PULSE
+// (default: small encoder turns back when more than 1 deg off, still in
+// between), HOLD_CONTINUOUS or HOLD_ONCE. steadyStop() + the next
+// steadyTurnBy() clears it.
 //
 // Use:
 //   loop(): motorUpdate(); gyroUpdate(); steadyUpdate();   // every loop
