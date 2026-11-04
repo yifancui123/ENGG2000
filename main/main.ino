@@ -37,7 +37,7 @@ static const unsigned long ON_US = 120000UL;    // length of thee detection wind
 static const int FINE_SIGN = 1;                 // +1 T or tube mount, -1 slit mount
 static const float K_DEG = 6.6;                 // body deg per unit of e (T mount ray trace)
 static const float E_CENTER = 0.15;             // |e| below this = centred (about 1 deg)
-static const unsigned long LOCK_MIN_US = 40000; // both front sensors above this = strong
+static const unsigned long SEEN_MIN_US = 2000;  // at or above this = beacon seen (blips reach ~1200)
 static const byte MAX_FINE_TURNS = 10;          // then give up and look elsewhere
 
 // - search and fire -
@@ -154,6 +154,10 @@ static bool sensorsNewFrame() {
 
 // - reading a frame -
 
+static bool seen(const SensorFrame &f, SensorId id) {
+    return f.strength[id] >= SEEN_MIN_US;
+}
+
 static bool frontSees(const SensorFrame &f) {
     return f.strength[FRONT_L] > 0 || f.strength[FRONT_R] > 0;
 }
@@ -170,10 +174,10 @@ static float fineDeg(const SensorFrame &f) {
     return FINE_SIGN * K_DEG * fineError(f);
 }
 
+// Both front views only overlap near the laser line, so both seen = on target.
+// A saturated reading still counts as seen.
 static bool locked(const SensorFrame &f) {
-    if (f.saturated[FRONT_L] || f.saturated[FRONT_R]) return false;   // e means nothing
-    return f.strength[FRONT_L] >= LOCK_MIN_US && f.strength[FRONT_R] >= LOCK_MIN_US
-        && fabs(fineError(f)) < E_CENTER;
+    return seen(f, FRONT_L) && seen(f, FRONT_R);
 }
 
 // Bits: 1 = left, 2 = right, 4 = back. Left + right alone (index 3) is a guess
