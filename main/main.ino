@@ -159,7 +159,7 @@ static bool seen(const SensorFrame &f, SensorId id) {
 }
 
 static bool frontSees(const SensorFrame &f) {
-    return f.strength[FRONT_L] > 0 || f.strength[FRONT_R] > 0;
+    return seen(f, FRONT_L) || seen(f, FRONT_R);
 }
 
 // e = (L-R)/(L+R): distance-independent, 0 when both are equal
@@ -185,9 +185,9 @@ static bool locked(const SensorFrame &f) {
 // for the team to check: front sees nothing, so turn round.
 static int coarseTurn(const SensorFrame &f) {
     static const int TURN[8] = { 0, 90, -90, 180, 180, 135, -135, 180 };
-    byte bits = (f.strength[SIDE_L] > 0)
-              | (f.strength[SIDE_R] > 0) << 1
-              | (f.strength[BACK] > 0) << 2;
+    byte bits = seen(f, SIDE_L)
+              | seen(f, SIDE_R) << 1
+              | seen(f, BACK) << 2;
     return TURN[bits];
 }
 
