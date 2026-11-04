@@ -26,7 +26,8 @@ static const int COARSE_POWER = 8;      // VS of the digital group
 static const int LASER_PIN = 12;
 
 enum SensorId { FRONT_L, FRONT_R, SIDE_L, SIDE_R, BACK, SENSOR_COUNT };
-static const uint8_t SENSOR_PIN[SENSOR_COUNT] = { A0, A1, A2, A3, 9 };
+// A0/A1 give the direction; D9-D11 only say whether the beacon is on that side
+static const uint8_t SENSOR_PIN[SENSOR_COUNT] = { A0, A1, 9, 10, 11 };
 
 // - sensor timing -
 static const unsigned long OFF_MS = 380;        // resets the AGC while off
