@@ -35,7 +35,7 @@ static const unsigned long ON_US = 120000UL;    // length of thee detection wind
 
 // - Fine aiming - 
 static const int FINE_SIGN = 1;                 // +1 T or tube mount, -1 slit mount
-static const float K_DEG = 6.6;                 // body deg per unit of e (T mount ray trace)
+static const float FINE_STEP = 3;               // deg per turn, must stay below the ~4.6 deg overlap
 static const float E_CENTER = 0.15;             // |e| below this = centred (about 1 deg)
 static const unsigned long SEEN_MIN_US = 2000;  // at or above this = beacon seen (blips reach ~1200)
 static const byte MAX_FINE_TURNS = 10;          // then give up and look elsewhere
@@ -169,9 +169,10 @@ static float fineError(const SensorFrame &f) {
     return l + r > 0 ? (l - r) / (l + r) : 0;
 }
 
-// + = beacon to the left, the same sign as steadyTurnBy()
+// + = beacon to the left, the same sign as steadyTurnBy(). Only one front sensor
+// sees it here, so e is just +-1: a fixed step that can't jump over the overlap.
 static float fineDeg(const SensorFrame &f) {
-    return FINE_SIGN * K_DEG * fineError(f);
+    return FINE_SIGN * (seen(f, FRONT_L) ? FINE_STEP : -FINE_STEP);
 }
 
 // Both front views only overlap near the laser line, so both seen = on target.
