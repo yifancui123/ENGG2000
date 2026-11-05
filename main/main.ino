@@ -26,7 +26,8 @@ static const int COARSE_POWER = 8;      // VS of the digital group
 static const int LASER_PIN = 12;
 
 enum SensorId { FRONT_L, FRONT_R, SIDE_L, SIDE_R, BACK, SENSOR_COUNT };
-static const uint8_t SENSOR_PIN[SENSOR_COUNT] = { A0, A1, A2, A3, 9 };
+// A0/A1 give the direction; D9-D11 only say whether the beacon is on that side
+static const uint8_t SENSOR_PIN[SENSOR_COUNT] = { A0, A1, 9, 10, 11 };
 
 // - sensor timing -
 static const unsigned long OFF_MS = 380;        // resets the AGC while off
@@ -34,9 +35,8 @@ static const unsigned long ON_US = 120000UL;    // length of thee detection wind
 
 // - Fine aiming - 
 static const int FINE_SIGN = 1;                 // +1 T or tube mount, -1 slit mount
-static const float K_DEG = 6.6;                 // body deg per unit of e (T mount ray trace)
-static const float E_CENTER = 0.15;             // |e| below this = centred (about 1 deg)
-static const unsigned long LOCK_MIN_US = 40000; // both front sensors above this = strong
+static const float FINE_STEP = 3;               // deg per turn, must stay below the ~4.6 deg overlap
+static const unsigned long SEEN_MIN_US = 2000;  // at or above this = beacon seen (blips reach ~1200)
 static const byte MAX_FINE_TURNS = 10;          // then give up and look elsewhere
 
 // - search and fire -
@@ -48,7 +48,6 @@ static const unsigned long REFIRE_MS = 3000;    // hold this long for the next t
 // Types go above the first function: Arduino puts its generated prototypes there.
 struct SensorFrame {
     unsigned long strength[SENSOR_COUNT];   // LOW pulse width in us, 0 = nothing seen
-    bool saturated[SENSOR_COUNT];           // still LOW when the window ended
     unsigned long onStartMs;                // when this frame's ON window began
 };
 
@@ -123,7 +122,6 @@ static void finishFrame() {
     unsigned long endUs = onStartUs + ON_US;
     for (byte i = 0; i < SENSOR_COUNT; i++) {
         const Pulse &p = pulse[i];
-        frame.saturated[i] = p.low && !p.ended;
         frame.strength[i] = p.low ? (p.ended ? p.highUs : endUs) - p.lowUs : 0;
     }
     frame.onStartMs = onStartMs;
@@ -153,8 +151,12 @@ static bool sensorsNewFrame() {
 
 // - reading a frame -
 
+static bool seen(const SensorFrame &f, SensorId id) {
+    return f.strength[id] >= SEEN_MIN_US;
+}
+
 static bool frontSees(const SensorFrame &f) {
-    return f.strength[FRONT_L] > 0 || f.strength[FRONT_R] > 0;
+    return seen(f, FRONT_L) || seen(f, FRONT_R);
 }
 
 // e = (L-R)/(L+R): distance-independent, 0 when both are equal
@@ -164,24 +166,25 @@ static float fineError(const SensorFrame &f) {
     return l + r > 0 ? (l - r) / (l + r) : 0;
 }
 
-// + = beacon to the left, the same sign as steadyTurnBy()
+// + = beacon to the left, the same sign as steadyTurnBy(). Only one front sensor
+// sees it here, so e is just +-1: a fixed step that can't jump over the overlap.
 static float fineDeg(const SensorFrame &f) {
-    return FINE_SIGN * K_DEG * fineError(f);
+    return FINE_SIGN * (seen(f, FRONT_L) ? FINE_STEP : -FINE_STEP);
 }
 
+// Both front views only overlap near the laser line, so both seen = on target.
+// A saturated reading still counts as seen.
 static bool locked(const SensorFrame &f) {
-    if (f.saturated[FRONT_L] || f.saturated[FRONT_R]) return false;   // e means nothing
-    return f.strength[FRONT_L] >= LOCK_MIN_US && f.strength[FRONT_R] >= LOCK_MIN_US
-        && fabs(fineError(f)) < E_CENTER;
+    return seen(f, FRONT_L) && seen(f, FRONT_R);
 }
 
 // Bits: 1 = left, 2 = right, 4 = back. Left + right alone (index 3) is a guess
 // for the team to check: front sees nothing, so turn round.
 static int coarseTurn(const SensorFrame &f) {
     static const int TURN[8] = { 0, 90, -90, 180, 180, 135, -135, 180 };
-    byte bits = (f.strength[SIDE_L] > 0)
-              | (f.strength[SIDE_R] > 0) << 1
-              | (f.strength[BACK] > 0) << 2;
+    byte bits = seen(f, SIDE_L)
+              | seen(f, SIDE_R) << 1
+              | seen(f, BACK) << 2;
     return TURN[bits];
 }
 
@@ -194,12 +197,11 @@ static void sensorsPrint(const SensorFrame &f) {
     Serial.print(F("  A1(R)=")); Serial.print(r);
     Serial.print(F("  diff="));  Serial.print(l - r);
     Serial.print(F("  e="));     Serial.print(e, 4);
-    if (f.saturated[FRONT_L] || f.saturated[FRONT_R]) Serial.print(F("  SAT"));
 
-    Serial.print(fabs(e) < E_CENTER ? F("  -> CENTERED")
-               : fineDeg(f) > 0     ? F("  -> LEFT")
-               :                      F("  -> RIGHT"));
-    if (locked(f)) Serial.print(F("  [LOCK]"));
+    Serial.print(locked(f)         ? F("  -> CENTERED")
+               : seen(f, FRONT_L)  ? F("  -> LEFT")
+               : seen(f, FRONT_R)  ? F("  -> RIGHT")
+               :                     F("  -> NO SIGNAL"));
 
     Serial.print(F("  SL="));   Serial.print(f.strength[SIDE_L]);
     Serial.print(F("  SR="));   Serial.print(f.strength[SIDE_R]);

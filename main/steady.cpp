@@ -1,4 +1,4 @@
-// ===== steady.cpp - gyro turn + measure-once drift cancel =====
+// ===== steady.cpp - gyro turn + hold on target (pulse / continuous / once) =====
 
 #include "steady.h"
 #include "motor.h"
@@ -10,15 +10,30 @@ static const unsigned long CANCEL_MS = 150;   // wheel speeds up, body stops
 static const unsigned long RETURN_MS = 1500;  // max time to reach the target
 static const float RETURN_TOL = 0.5;          // deg, close enough
 
-// CONTINUOUS = true: after CANCEL, keep correcting with the gyro every
-// 20 ms for the whole hold, so a wire that twists back (spring) is fought
-// all the time. false = the measure-once hold (one speed + one nudge).
-static const bool CONTINUOUS = true;
-static const unsigned long LOOP_MS = 20;
-static const float ANGLE_GAIN = 3.0;    // deg/s back towards target per deg off
+// How the hold works after the turn:
+//   HOLD_PULSE      if the body drifts more than PULSE_DEAD off target, a
+//                   small encoder turn back (turnBy) + brake, wait, check
+//                   again. Still between pulses. (default)
+//   HOLD_CONTINUOUS measure the drift (coarse), then a cascade every 10 ms
+//                   (fine): angle PD -> wanted body rate -> rate PD that
+//                   adds to the wheel speed. Gyro rate averaged over 5
+//                   samples. Fights a wire that twists back.
+//   HOLD_ONCE       measure the drift, one cancelling speed + one nudge
+enum HoldMode { HOLD_PULSE, HOLD_CONTINUOUS, HOLD_ONCE };
+static const HoldMode HOLD_MODE = HOLD_PULSE;
+
+static const float PULSE_DEAD = 0.5;          // deg, no pulse inside this
+static const unsigned long PULSE_GAP_MS = 100; // wait after a pulse before checking
+
+// continuous cascade gains. Wobbles: lower RATE_KP. Creeps: raise ANGLE_KP.
+static const unsigned long LOOP_MS = 10;
+static const float ANGLE_KP = 2.0;      // deg/s back towards target per deg off
+static const float ANGLE_KD = 0.2;      // less return speed while already moving
 static const float MAX_RETURN = 20.0;   // deg/s, fastest it turns back
-static const float RATE_GAIN = 0.15;    // share of the rate error fixed every 20 ms
+static const float RATE_KP = 0.08;      // share of the rate error added every 10 ms
+static const float RATE_KD = 0.3;       // damping on the change of rate error
 static const float MAX_WHEEL = 50.0;    // deg/s, wheel limit (motor clamps ~54)
+static const byte AVG_N = 5;            // gyro rate moving average
 
 static SteadyState state = STEADY_OFF;
 static unsigned long stateStart = 0;
@@ -29,21 +44,65 @@ static float rateSum = 0;
 static long rateN = 0;
 static float wheelCmd = 0;              // hold speed now, body deg/s
 static unsigned long lastLoopMs = 0;
+static float rateBuf[AVG_N];
+static byte rateIdx = 0;
+static float lastRateErr = 0;
+static bool pulsing = false;            // a pulse turn is running
+static unsigned long pulseEndMs = 0;
 
 static void enter(SteadyState s) {
   state = s;
   stateStart = millis();
 }
 
-// continuous hold: body rate should be ANGLE_GAIN x angle error (back to the
-// target); the wheel speed is nudged towards that every 20 ms
+static void resetCascade() {
+  for (byte i = 0; i < AVG_N; i++) rateBuf[i] = gyroRate();
+  rateIdx = 0;
+  lastRateErr = 0;
+  lastLoopMs = millis();
+}
+
+// continuous hold, every 10 ms:
+//   outer (angle PD): wanted body rate back towards the target
+//   inner (rate PD, velocity form): adds to the wheel speed until the body
+//   moves at the wanted rate - keeps speeding the wheel up against a wire
 static void holdLoop() {
   if (millis() - lastLoopMs < LOOP_MS) return;
   lastLoopMs = millis();
-  float want = constrain(ANGLE_GAIN * (holdAngle - gyroAngle()), -MAX_RETURN, MAX_RETURN);
-  wheelCmd += RATE_GAIN * (want - gyroRate());
+
+  rateBuf[rateIdx] = gyroRate();
+  rateIdx = (rateIdx + 1) % AVG_N;
+  float rate = 0;
+  for (byte i = 0; i < AVG_N; i++) rate += rateBuf[i];
+  rate /= AVG_N;
+
+  float want = ANGLE_KP * (holdAngle - gyroAngle()) - ANGLE_KD * rate;
+  want = constrain(want, -MAX_RETURN, MAX_RETURN);
+
+  float rateErr = want - rate;
+  wheelCmd += RATE_KP * rateErr + RATE_KD * (rateErr - lastRateErr);
+  lastRateErr = rateErr;
   wheelCmd = constrain(wheelCmd, -MAX_WHEEL, MAX_WHEEL);
   motorHoldSpeed(wheelCmd);
+}
+
+// pulse hold: off by more than PULSE_DEAD -> small turn back, brake, wait
+static void pulseLoop() {
+  if (motorBusy()) return;               // pulse still running
+  if (pulsing) {
+    pulsing = false;
+    pulseEndMs = millis();
+  }
+  if (millis() - pulseEndMs < PULSE_GAP_MS) return;   // let it settle
+  float err = holdAngle - gyroAngle();
+  if (fabs(err) < PULSE_DEAD) return;
+  turnBy(err);
+  pulsing = true;
+}
+
+static void runHold() {
+  if (HOLD_MODE == HOLD_PULSE) pulseLoop();
+  if (HOLD_MODE == HOLD_CONTINUOUS) holdLoop();
 }
 
 static void resetMeasure() {
@@ -85,7 +144,15 @@ void steadyUpdate() {
       break;
 
     case STEADY_SETTLE:
-      if (t >= SETTLE_MS) enter(STEADY_MEASURE);
+      if (t < SETTLE_MS) break;
+      if (HOLD_MODE == HOLD_PULSE) {     // no drift measuring, pulse straight away
+        correction = holdAngle - gyroAngle();
+        pulsing = false;
+        pulseEndMs = millis() - PULSE_GAP_MS;
+        enter(STEADY_RETURN);
+      } else {
+        enter(STEADY_MEASURE);
+      }
       break;
 
     case STEADY_MEASURE:
@@ -104,21 +171,23 @@ void steadyUpdate() {
       // give the wheel a moment to reach the speed, then go to the target
       if (t >= CANCEL_MS) {
         correction = holdAngle - gyroAngle();
-        if (!CONTINUOUS) motorHoldNudge(correction);   // else holdLoop returns it
-        lastLoopMs = millis();
+        if (HOLD_MODE == HOLD_ONCE) motorHoldNudge(correction);   // else holdLoop returns it
+        resetCascade();
         enter(STEADY_RETURN);
       }
       break;
 
-    case STEADY_RETURN:
-      if (CONTINUOUS) holdLoop();
-      if (fabs(holdAngle - gyroAngle()) < RETURN_TOL || t >= RETURN_MS) {
-        enter(STEADY_READY);
-      }
+    case STEADY_RETURN: {
+      runHold();
+      float off = fabs(holdAngle - gyroAngle());
+      bool there = HOLD_MODE == HOLD_PULSE ? (!motorBusy() && off < PULSE_DEAD)
+                                           : off < RETURN_TOL;
+      if (there || t >= RETURN_MS) enter(STEADY_READY);
       break;
+    }
 
     case STEADY_READY:
-      if (CONTINUOUS) holdLoop();        // keep fighting the wire
+      runHold();                         // keep it on target
       break;
 
     default:
