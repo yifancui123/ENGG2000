@@ -1,5 +1,5 @@
 // MQ Sentinel - see it, fire the laser (based on main_sprint2)
-// Loop: motor burst -> stop -> read the front sensor -> if seen, laser on.
+// Loop: motor burst -> stop -> read the sensors -> if the front one sees it, laser on.
 // While the laser is on the motor stays off: no bursts and no sensor reads.
 
 #include "analog_sensor.h"
@@ -20,10 +20,13 @@ const unsigned long FIRE_MIN_US = (unsigned long)ON_MS * 1000UL * 8 / 10;
 
 // ---- debug printing ----
 const bool DEBUG = true;
+const char* SENSOR_NAMES[sensorNum] = { "A0", "A1", "A2", "A3" };
 
 const int STARTUP_DELAY_MS = 5000;
 
-unsigned long strength[sensorNum];     // strength[0] = front sensor
+// strength[0] = front sensor, the only one that decides anything so far.
+// [1]-[3] (A1, A2, A3) are read and printed, but not used yet.
+unsigned long strength[sensorNum];
 
 unsigned long ms_at_last_laser_fire = 0;
 bool laser_firing = false;
@@ -50,7 +53,7 @@ void setup() {
   digitalWrite(LASER_PIN, LOW);
 
   setupMotor();   // motor pins, driver enable, encoder interrupt
-  setupSensor();  // power pin + sensor pin
+  setupSensor();  // power pin + sensor pins
 
   delay(STARTUP_DELAY_MS);
 }
@@ -73,8 +76,13 @@ void loop() {
   readStrengths(strength);
 
   if (DEBUG) {
-    Serial.print("Front:");
-    Serial.println(strength[0]);
+    for (int i = 0; i < sensorNum; i++) {
+      if (i > 0) Serial.print("\t");
+      Serial.print(SENSOR_NAMES[i]);
+      Serial.print(":");
+      Serial.print(strength[i]);
+    }
+    Serial.println();
   }
 
   // 3. seen -> fire
