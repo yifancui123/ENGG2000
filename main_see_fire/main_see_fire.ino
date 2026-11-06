@@ -15,6 +15,7 @@ const unsigned long FIRING_MS = 2500;  // brief needs 2 s, 0.5 s spare for clock
 // ---- turning ----
 const float TURN_STEP = 10;            // deg per turn
 const float MAX_ANGLE = 360;           // deg either way, so the wire can't wind up
+const byte STARTUP_READS = 4;          // 4 reads = 2 s before the first turn
 
 // ---- fire rule ----
 // Front pulse must fill at least 80% of the window (96,000 us, same as Sprint 2)
@@ -34,6 +35,7 @@ bool laser_firing = false;
 bool still = false;                    // body has finished its turn
 unsigned long stillSinceMs = 0;
 int searchDir = 1;                     // + = anticlockwise (left), seen from above
+byte readsLeft = STARTUP_READS;        // reads with no signal before the next turn
 
 //---------------------------------------------------------------------------------------------------------
 void fireLaser() {
@@ -74,7 +76,8 @@ void printFrame(const SensorFrame &f) {
 void decide(const SensorFrame &f) {
   if (f.strength[FRONT] >= FIRE_MIN_US) {
     fireLaser();
-  } else {
+  } else if (--readsLeft == 0) {
+    readsLeft = 1;                     // after the start, one read per step
     searchStep();
   }
 }
