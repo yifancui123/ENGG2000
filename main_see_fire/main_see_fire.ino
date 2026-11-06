@@ -1,6 +1,8 @@
 // MQ Sentinel - see it, fire the laser (based on main_sprint2)
-// Loop: read the sensors while still -> A0 over the threshold: laser on,
-// otherwise turn 10 degrees and look again.
+// Loop: read the sensors while still.
+//   A0 over the threshold: laser on.
+//   Otherwise turn 10 degrees towards the strongest of A1-A3 and look again.
+//   None of them see it: turn 10 degrees the search way and look again.
 // Nothing in loop() blocks: motor, gyro and steady must run every pass.
 
 #include "analog_sensor.h"
@@ -20,6 +22,9 @@ const byte STARTUP_READS = 4;          // 4 reads = 2 s before the first turn
 // ---- fire rule ----
 // Front pulse must fill at least 80% of the window (96,000 us, same as Sprint 2)
 const unsigned long FIRE_MIN_US = (unsigned long)ON_MS * 1000UL * 8 / 10;
+
+// ---- direction rule ----
+const unsigned long SEEN_MIN_US = 2000;  // at or above this = lit (blips reach ~1200)
 
 // ---- debug printing ----
 const bool DEBUG = true;
@@ -73,9 +78,35 @@ void printFrame(const SensorFrame &f) {
   Serial.println();
 }
 
+// The lit sensor with the highest reading among A1-A3, or FRONT if none is lit.
+SensorId strongestSide(const SensorFrame &f) {
+  SensorId best = FRONT;
+  unsigned long bestStrength = 0;
+  for (int i = RIGHT; i <= LEFT; i++) {
+    if (f.strength[i] >= SEEN_MIN_US && f.strength[i] > bestStrength) {
+      best = (SensorId)i;
+      bestStrength = f.strength[i];
+    }
+  }
+  return best;
+}
+
 void decide(const SensorFrame &f) {
   if (f.strength[FRONT] >= FIRE_MIN_US) {
     fireLaser();
+    return;
+  }
+
+  SensorId side = strongestSide(f);
+  if (side == LEFT) {
+    readsLeft = 1;
+    startTurn(TURN_STEP);              // + = left
+  } else if (side == RIGHT) {
+    readsLeft = 1;
+    startTurn(-TURN_STEP);
+  } else if (side == BACK) {
+    readsLeft = 1;
+    searchStep();                      // either way round reaches it
   } else if (--readsLeft == 0) {
     readsLeft = 1;                     // after the start, one read per step
     searchStep();
