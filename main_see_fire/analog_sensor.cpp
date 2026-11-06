@@ -3,9 +3,12 @@
 // AGC is fresh and detects the beacon for a short window whose LOW-pulse
 // width = strength. All sensors are read together in the same ON window.
 //
+// Nothing here blocks: loop() must keep running the motor and gyro, so the
+// OFF/ON cycle moves forward a little on every sensorsUpdate().
+//
 // Wiring:
 //   All TSSP VS  -> D4 (shared power pin)
-//   OUT: front->A0, the other three->A1, A2, A3 (temporary pins)
+//   OUT: front->A0, right->A1, back->A2, left->A3
 //   All GND -> GND
 
 #include "Arduino.h"
@@ -15,56 +18,86 @@ static const int POWER_PIN = 4;                  // shared VS for all sensors
 
 static const int sensorPins[sensorNum] = {A0, A1, A2, A3};
 
-static const int OFF_MS = 380;   // powered OFF (resets the AGC)
+static const unsigned long OFF_MS = 380;         // powered OFF (resets the AGC)
+static const unsigned long ON_US = (unsigned long)ON_MS * 1000UL;
+
+struct Pulse {
+  bool low;                  // went LOW
+  bool ended;                // came back HIGH
+  unsigned long lowUs;
+  unsigned long highUs;
+};
+
+static Pulse pulse[sensorNum];
+static SensorFrame frame;
+static bool frameReady = false;
+static bool powered = false;
+static unsigned long offStartMs = 0;
+static unsigned long onStartUs = 0;
+static unsigned long onStartMs = 0;
+
+static void powerOff() {
+  digitalWrite(POWER_PIN, LOW);
+  powered = false;
+  offStartMs = millis();
+}
+
+static void powerOn() {
+  memset(pulse, 0, sizeof pulse);
+  digitalWrite(POWER_PIN, HIGH);
+  powered = true;
+  onStartUs = micros();
+  onStartMs = millis();
+}
+
+static void pollPulses(unsigned long now) {
+  for (int i = 0; i < sensorNum; i++) {
+    Pulse &p = pulse[i];
+    if (p.ended) continue;                       // first pulse only
+    bool low = (digitalRead(sensorPins[i]) == LOW);
+    if (low && !p.low) {
+      p.low = true;
+      p.lowUs = now;
+    } else if (!low && p.low) {
+      p.ended = true;
+      p.highUs = now;
+    }
+  }
+}
+
+static void finishFrame() {
+  unsigned long endUs = onStartUs + ON_US;       // never came back HIGH: saturated
+  for (int i = 0; i < sensorNum; i++) {
+    const Pulse &p = pulse[i];
+    frame.strength[i] = p.low ? (p.ended ? p.highUs : endUs) - p.lowUs : 0;
+  }
+  frame.onStartMs = onStartMs;
+  frameReady = true;
+  powerOff();
+}
 
 void setupSensor() {
   pinMode(POWER_PIN, OUTPUT);
-  digitalWrite(POWER_PIN, LOW);
   for (int i = 0; i < sensorNum; i++) pinMode(sensorPins[i], INPUT);
-  delay(300);
+  powerOff();
 }
 
-// One power-cycle for all sensors (about 500 ms in total).
-// out[i] = first LOW-pulse width in us = strength, 0 if unseen.
-void readStrengths(unsigned long out[sensorNum]) {
-  unsigned long lowStart[sensorNum];
-  bool isLow[sensorNum];
-  bool done[sensorNum];
-  for (int i = 0; i < sensorNum; i++) {
-    out[i] = 0;
-    lowStart[i] = 0;
-    isLow[i] = false;
-    done[i] = false;
+void sensorsUpdate() {
+  if (!powered) {
+    if (millis() - offStartMs >= OFF_MS) powerOn();
+    return;
   }
+  unsigned long now = micros();
+  if (now - onStartUs < ON_US) pollPulses(now);
+  else finishFrame();
+}
 
-  digitalWrite(POWER_PIN, LOW);
-  delay(OFF_MS);                                   // reset the AGC
-  digitalWrite(POWER_PIN, HIGH);                   // fresh power-up
-  unsigned long tStart   = micros();
-  unsigned long windowUs = (unsigned long)ON_MS * 1000UL;
+bool sensorsNewFrame() {
+  bool ready = frameReady;
+  frameReady = false;
+  return ready;
+}
 
-  while (micros() - tStart < windowUs) {
-    unsigned long now = micros();
-    int finished = 0;
-    for (int i = 0; i < sensorNum; i++) {
-      if (done[i]) {
-        finished++;
-        continue;
-      }
-      bool low = (digitalRead(sensorPins[i]) == LOW);
-      if (low && !isLow[i]) {                      // falling edge: pulse starts
-        lowStart[i] = now;
-        isLow[i] = true;
-      } else if (!low && isLow[i]) {               // rising edge: pulse ends
-        out[i] = now - lowStart[i];
-        done[i] = true;
-      }
-    }
-    if (finished == sensorNum) break;
-  }
-
-  // went LOW but never came back HIGH (saturated): use the window end
-  for (int i = 0; i < sensorNum; i++) {
-    if (isLow[i] && !done[i]) out[i] = tStart + windowUs - lowStart[i];
-  }
+const SensorFrame &sensorFrame() {
+  return frame;
 }

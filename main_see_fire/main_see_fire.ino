@@ -1,18 +1,20 @@
 // MQ Sentinel - see it, fire the laser (based on main_sprint2)
-// Loop: motor burst -> stop -> read the sensors -> if the front one sees it, laser on.
-// While the laser is on the motor stays off: no bursts and no sensor reads.
+// Loop: read the sensors while still -> A0 over the threshold: laser on,
+// otherwise turn 10 degrees and look again.
+// Nothing in loop() blocks: motor, gyro and steady must run every pass.
 
 #include "analog_sensor.h"
-#include "motor_control.h"
+#include "motor.h"
+#include "gyro.h"
+#include "steady.h"
 
 // ---- laser ----
 const int LASER_PIN = 12;
 const unsigned long FIRING_MS = 2500;  // brief needs 2 s, 0.5 s spare for clock error
 
-// ---- motor bursts ----
-const int SCAN_SPEED = 150;       // PWM 0-255, normal scanning
-const int PULSE_MS   = 80;        // how long the motor runs each burst
-const int SETTLE_MS  = 20;        // let the turret stop moving before reading
+// ---- turning ----
+const float TURN_STEP = 10;            // deg per turn
+const float MAX_ANGLE = 360;           // deg either way, so the wire can't wind up
 
 // ---- fire rule ----
 // Front pulse must fill at least 80% of the window (96,000 us, same as Sprint 2)
@@ -24,12 +26,14 @@ const char* SENSOR_NAMES[sensorNum] = { "A0", "A1", "A2", "A3" };
 
 const int STARTUP_DELAY_MS = 5000;
 
-// strength[0] = front sensor, the only one that decides anything so far.
-// [1]-[3] (A1, A2, A3) are read and printed, but not used yet.
-unsigned long strength[sensorNum];
+enum SensorId { FRONT, RIGHT, BACK, LEFT };
 
 unsigned long ms_at_last_laser_fire = 0;
 bool laser_firing = false;
+
+bool still = false;                    // body has finished its turn
+unsigned long stillSinceMs = 0;
+int searchDir = 1;                     // + = anticlockwise (left), seen from above
 
 //---------------------------------------------------------------------------------------------------------
 void fireLaser() {
@@ -42,6 +46,36 @@ void updateLaser() {
   if (millis() - ms_at_last_laser_fire >= FIRING_MS) {
     laser_firing = false;
     digitalWrite(LASER_PIN, LOW);
+    stillSinceMs = millis();           // next decision needs a frame from after the shot
+  }
+}
+
+void startTurn(float deg) {
+  steadyStop();
+  steadyTurnBy(deg);
+  still = false;
+}
+
+void searchStep() {
+  if (fabs(gyroAngle() + searchDir * TURN_STEP) > MAX_ANGLE) searchDir = -searchDir;
+  startTurn(searchDir * TURN_STEP);
+}
+
+void printFrame(const SensorFrame &f) {
+  for (int i = 0; i < sensorNum; i++) {
+    if (i > 0) Serial.print("\t");
+    Serial.print(SENSOR_NAMES[i]);
+    Serial.print(":");
+    Serial.print(f.strength[i]);
+  }
+  Serial.println();
+}
+
+void decide(const SensorFrame &f) {
+  if (f.strength[FRONT] >= FIRE_MIN_US) {
+    fireLaser();
+  } else {
+    searchStep();
   }
 }
 
@@ -52,41 +86,38 @@ void setup() {
   pinMode(LASER_PIN, OUTPUT);
   digitalWrite(LASER_PIN, LOW);
 
-  setupMotor();   // motor pins, driver enable, encoder interrupt
   setupSensor();  // power pin + sensor pins
+  motorBegin();   // motor pins, driver enable, encoder interrupts
 
   delay(STARTUP_DELAY_MS);
+
+  if (!gyroBegin()) {
+    Serial.println(F("No gyro, check A4/A5"));
+    while (true) {}
+  }
+  gyroCalibrate(2000);  // satellite hanging STILL
+  steadyStart();        // hold here, first decision comes once this is READY
 }
 
 //---------------------------------------------------------------------------------------------------------
 void loop() {
-  // laser on: leave the motor off until the shot is finished
-  if (laser_firing) {
-    updateLaser();
-    return;
+  motorUpdate();
+  gyroUpdate();
+  steadyUpdate();
+  sensorsUpdate();
+
+  if (!still && steadyReady()) {
+    still = true;
+    stillSinceMs = millis();
   }
 
-  // 1. motor burst
-  motorForward(SCAN_SPEED);
-  delay(PULSE_MS);
-  motorStop();
-  delay(SETTLE_MS);
+  if (laser_firing) updateLaser();
 
-  // 2. look (one power cycle, about 500 ms)
-  readStrengths(strength);
+  if (!sensorsNewFrame() || laser_firing) return;
 
-  if (DEBUG) {
-    for (int i = 0; i < sensorNum; i++) {
-      if (i > 0) Serial.print("\t");
-      Serial.print(SENSOR_NAMES[i]);
-      Serial.print(":");
-      Serial.print(strength[i]);
-    }
-    Serial.println();
-  }
+  const SensorFrame &f = sensorFrame();
+  if (!still || f.onStartMs < stillSinceMs) return;  // taken while turning
 
-  // 3. seen -> fire
-  if (strength[0] >= FIRE_MIN_US) {
-    fireLaser();
-  }
+  if (DEBUG) printFrame(f);
+  decide(f);
 }
