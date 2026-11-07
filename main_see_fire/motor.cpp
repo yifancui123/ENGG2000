@@ -79,6 +79,8 @@ static void motorReverse(int speedValue) {
 
 static void brake() {
   analogWrite(motorPWM, 0);             // EN low = brake in PH/EN mode
+  digitalWrite(motorDirection, LOW);    // PH low too: if PMODE comes loose the
+                                        // driver can't run the motor at full speed
 }
 
 static void drive(int u) {
