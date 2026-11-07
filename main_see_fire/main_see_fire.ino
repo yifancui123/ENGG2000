@@ -28,7 +28,7 @@ const unsigned long SEEN_MIN_US = 2000;  // at or above this = lit (blips reach 
 
 // ---- debug printing ----
 const bool DEBUG = true;
-const bool SENSOR_TEST = true;  // true = sensors and laser only: no motor or gyro
+const bool SENSOR_TEST = false; // true = sensors and laser only: no motor or gyro
 const char* SENSOR_NAMES[sensorNum] = { "A0", "A1", "A2", "A3" };
 
 const int STARTUP_DELAY_MS = 5000;
