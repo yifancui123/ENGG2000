@@ -25,7 +25,7 @@ static const int TURN_SIGN = -1;
 // ----- PD constants -----
 static const float kp = 1.0;
 static const float kd = 0.05;
-static const int MAX_PWM = 100;
+static const int MAX_PWM = 60;          // top speed of a turn (was 100, too fast)
 static const int MIN_PWM = 17;          // motor deadband
 static const int DONE_TOL = 10;         // counts (~0.2 deg of body)
 static const unsigned long LOOP_US = 5000;
@@ -122,7 +122,7 @@ void moveWheelBy(long counts) {
   lastPos = now;
   moveStart = millis();
   lastLoop = micros();
-  timeoutMs = 1000 + labs(counts) / 2;  // 1 s + 2 ms per 4 counts (90 deg -> 3.5 s)
+  timeoutMs = 1000 + labs(counts);      // 1 s + 1 ms per count (90 deg -> 6 s, slower MAX_PWM)
   moving = true;
   holding = false;
   result = MOTOR_BUSY;
