@@ -21,7 +21,7 @@ How we work: one step at a time. Each code change is shown first, made only once
    5. Paste all `SCAN`, `STEP` and summary lines back.
 5. **Decide the fire logic** from the scan (see Step 1, option D).
 
-`mpu_raw_test`, `motor_encoder_test` and `a0_scan_test` are test sketches written on 7-8 Nov. They are not in the repo yet. Each will be added once approved.
+The test sketches are in the repo root: `mpu_raw_test/`, `motor_encoder_test/` and `a0_scan_test/`. Their library files are copies. `motor_encoder_test` uses the PD folder's `motor.cpp`, which doesn't pull PH low when braking, so keep the battery within reach.
 
 ---
 
