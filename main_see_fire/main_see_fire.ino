@@ -187,7 +187,11 @@ void loop() {
 
   if (DEBUG) {
     printFrame(f);
-    Serial.println();
+    Serial.print(F("\thold "));
+    Serial.print(steadyHoldAngle(), 1);
+    Serial.print(F(" gyro "));
+    Serial.print(gyroAngle(), 1);
+    printDecision(f);                    // prints "\t-> FIRE / A3: TURN ..." + newline
   }
   decide(f);
 }
