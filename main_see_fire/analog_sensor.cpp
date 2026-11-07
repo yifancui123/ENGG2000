@@ -8,7 +8,7 @@
 //
 // Wiring:
 //   All TSSP VS  -> D4 (shared power pin)
-//   OUT: front->A0, right->A1, back->A2, left->A3
+//   OUT: front->A0, right->A1, back->A2, left->A3 (body sides)
 //   All GND -> GND
 
 #include "Arduino.h"
@@ -37,6 +37,7 @@ static unsigned long onStartUs = 0;
 static unsigned long onStartMs = 0;
 
 static void powerOff() {
+  for (int i = 0; i < sensorNum; i++) pinMode(sensorPins[i], INPUT);  // never feed a powered-off sensor
   digitalWrite(POWER_PIN, LOW);
   powered = false;
   offStartMs = millis();
@@ -45,6 +46,7 @@ static void powerOff() {
 static void powerOn() {
   memset(pulse, 0, sizeof pulse);
   digitalWrite(POWER_PIN, HIGH);
+  for (int i = 0; i < sensorNum; i++) pinMode(sensorPins[i], INPUT_PULLUP);  // an unplugged pin must read HIGH
   powered = true;
   onStartUs = micros();
   onStartMs = millis();

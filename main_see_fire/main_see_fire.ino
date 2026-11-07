@@ -28,10 +28,13 @@ const unsigned long SEEN_MIN_US = 2000;  // at or above this = lit (blips reach 
 
 // ---- debug printing ----
 const bool DEBUG = true;
+const bool SENSOR_TEST = true;  // true = sensors and laser only: no motor or gyro
 const char* SENSOR_NAMES[sensorNum] = { "A0", "A1", "A2", "A3" };
 
 const int STARTUP_DELAY_MS = 5000;
 
+// LEFT and RIGHT are the body's own sides, looking out along A0 and the laser.
+// A person standing in front of A0 and facing it sees A1 on their left.
 enum SensorId { FRONT, RIGHT, BACK, LEFT };
 
 unsigned long ms_at_last_laser_fire = 0;
@@ -75,7 +78,6 @@ void printFrame(const SensorFrame &f) {
     Serial.print(":");
     Serial.print(f.strength[i]);
   }
-  Serial.println();
 }
 
 // The lit sensor with the highest reading among A1-A3, or FRONT if none is lit.
@@ -89,6 +91,17 @@ SensorId strongestSide(const SensorFrame &f) {
     }
   }
   return best;
+}
+
+// SENSOR_TEST: print what the robot would do with this frame.
+void printDecision(const SensorFrame &f) {
+  SensorId side = strongestSide(f);
+  Serial.print("\t-> ");
+  Serial.println(f.strength[FRONT] >= FIRE_MIN_US ? "FIRE"
+               : side == RIGHT ? "A1: TURN CLOCKWISE"
+               : side == BACK  ? "A2: TURN (BACK)"
+               : side == LEFT  ? "A3: TURN ANTICLOCKWISE"
+               :                 "NONE");
 }
 
 void decide(const SensorFrame &f) {
@@ -121,6 +134,11 @@ void setup() {
   digitalWrite(LASER_PIN, LOW);
 
   setupSensor();  // power pin + sensor pins
+  if (SENSOR_TEST) {
+    Serial.println(F("SENSOR_TEST: A0 front, A1 body right, A2 back, A3 body left"));
+    return;
+  }
+
   motorBegin();   // motor pins, driver enable, encoder interrupts
 
   delay(STARTUP_DELAY_MS);
@@ -135,6 +153,17 @@ void setup() {
 
 //---------------------------------------------------------------------------------------------------------
 void loop() {
+  if (SENSOR_TEST) {
+    sensorsUpdate();
+    if (laser_firing) updateLaser();
+    if (sensorsNewFrame()) {
+      printFrame(sensorFrame());
+      printDecision(sensorFrame());
+      if (!laser_firing && sensorFrame().strength[FRONT] >= FIRE_MIN_US) fireLaser();
+    }
+    return;
+  }
+
   motorUpdate();
   gyroUpdate();
   steadyUpdate();
@@ -152,6 +181,9 @@ void loop() {
   const SensorFrame &f = sensorFrame();
   if (!still || f.onStartMs < stillSinceMs) return;  // taken while turning
 
-  if (DEBUG) printFrame(f);
+  if (DEBUG) {
+    printFrame(f);
+    Serial.println();
+  }
   decide(f);
 }

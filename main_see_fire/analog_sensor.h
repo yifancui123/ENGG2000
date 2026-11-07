@@ -2,7 +2,7 @@
 #define ANALOG_SENSOR_H
 
 #include <Arduino.h>
-static const int sensorNum = 4;  // A0 front, A1 right, A2 back, A3 left
+static const int sensorNum = 4;  // A0 front, A1 right, A2 back, A3 left (body sides)
 static const int ON_MS  = 120;   // powered ON window
 
 struct SensorFrame {
