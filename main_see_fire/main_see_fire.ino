@@ -109,8 +109,15 @@ void printDecision(const SensorFrame &f) {
 
 void decide(const SensorFrame &f) {
   if (f.strength[FRONT] >= FIRE_MIN_US) {
-    // still on the held angle? (steady may be turning back after a drift)
-    if (fabs(steadyHoldAngle() - gyroAngle()) < FIRE_TOL) fireLaser();
+    if (fabs(steadyHoldAngle() - gyroAngle()) < FIRE_TOL) {
+      fireLaser();
+    } else {
+      // A0 sees it from here, so here is the target: hold this angle,
+      // fire on the next frame taken once it is still
+      steadyStop();
+      steadyStartAt(gyroAngle());
+      still = false;
+    }
     return;
   }
 
