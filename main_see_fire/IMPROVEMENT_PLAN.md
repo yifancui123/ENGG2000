@@ -8,6 +8,23 @@ How we work: one step at a time. Each code change is shown first, made only once
 
 ---
 
+## Tomorrow (8 Nov): checklist
+
+1. **New gyro:** fit a new MPU6050 with the headers soldered. VCC → 5V, GND → GND, SDA → A4, SCL → A5. Run `mpu_raw_test`: when still, one `acc` axis should read about ±16000, and `gyro` should change when the body is turned. The old module reads all 0 and is dead.
+2. **Motor check:** with the 12 V battery on, run `motor_encoder_test` and type `10`, `-10`, `90`. Each should print `DONE`. Hanging and seen from above, `+` must turn the body anticlockwise. After a reset the direction must not flip. If it does, the PMODE→GND wire is loose again.
+3. **Step 0 baseline:** upload `main_see_fire` with the robot hanging and still for 7 s. Record the numbers listed under Step 0.
+4. **A0 scan (`a0_scan_test`):** beacon 1 m away at A0's height, robot hanging, battery on.
+   1. Power on and keep still for 2 s.
+   2. `l` turns the laser on. Type small angles, e.g. `2` or `-1`, until the laser is on the bullseye.
+   3. `z` sets that angle as 0. Then `l` turns the laser off.
+   4. `g` starts the scan: -15° → +15° → -15° in 1° steps, 3 frames each, about 3 min.
+   5. Paste all `SCAN`, `STEP` and summary lines back.
+5. **Decide the fire logic** from the scan (see Step 1, option D).
+
+`mpu_raw_test`, `motor_encoder_test` and `a0_scan_test` are test sketches written on 7-8 Nov. They are not in the repo yet. Each will be added once approved.
+
+---
+
 ## Step 0: baseline test with a new gyro (no code change)
 
 **Why:** every later step needs real numbers.
@@ -57,6 +74,11 @@ What this shows:
 - **A. Calibrated overshoot (fast):** A0 crosses the threshold while turning, so keep turning the same way by half of A0's measured view width, then fire. This costs one extra turn and only works if the edges are consistent.
 - **B. Edge-to-edge scan (accurate, slower):** after the first crossing, keep turning in 2-3° steps until A0 drops below the threshold. That is the second edge. Turn back to the middle of the two edges and fire. This costs about 5-8 extra steps.
 - **C. Make A0 narrower (hardware):** use a longer tube or a smaller hole, so A0 is only saturated within ±2-3°. That makes the current code accurate with no code change. Fixing the A0 light leak belongs here too.
+- **D. Three zones (most likely, after the hand sweep):**
+  - A0 below about 100,000: use the side sensors and big turns.
+  - A0 between about 100,000 and 119,200: the beacon is near. Turn 1-2° at a time. If A0 goes up, keep going the same way. If it goes down, turn back.
+  - A0 at or above 119,200: hold still and fire. If the scan shows A0's centre is off from the laser, add that offset first.
+  The exact numbers come from the `a0_scan_test` result.
 
 **Done when:** in 5 runs, the laser lands within the 16 cm ring each time, ideally in the 8 cm bullseye.
 
