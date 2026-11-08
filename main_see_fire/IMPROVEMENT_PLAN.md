@@ -124,7 +124,9 @@ The test sketches are in the repo root: `mpu_raw_test/`, `motor_encoder_test/` a
 | T1 | | | |
 | T2 | | | |
 | T3 | 7-8 Nov (hand) | see the table under T3 | need the gyro scan |
-| T4 | | | |
+| T3 | 8 Nov (table, gyro) | A0 saturated +2.0° to +8.4° (6.4° top, centre about +5.2°), slopes about 6,000/° both sides. See `IR_SENSOR_TEST_DATA_2026-11-08.md` | fire level about 110,000; aim for the middle of the top; laser offset still unknown |
+| T4 | 8 Nov (table) | A0 noise about ±1,000 on the slopes, ±150 on the top | one frame is enough; treat changes under 2,000 as noise |
+| T2 (partial) | 8 Nov (table) | A1-A3 read 40-107k with the beacon in front at 1 m; A3 - A1 gives the side beyond about ±3° | use A3 - A1, not 1/0 |
 | T5 | | | |
 | T6 | | | |
 | C1-C6 | | | |
