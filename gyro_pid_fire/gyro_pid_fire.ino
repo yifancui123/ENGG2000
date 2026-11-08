@@ -66,9 +66,10 @@ const unsigned long LOOP_US = 5000;   // 5 ms control loop
 // ---------------- search ----------------
 const float SCAN_RATE = 20;      // deg/s, normal search speed
 const float SLOW_RATE = 6;       // deg/s, when A0 sees something weak
-const float SWEEP_HALF = 30;     // deg either side of the spot
+const float SWEEP_HALF = 45;     // deg either side of the spot (a side sensor only says +-45)
 const float SWEEP_RATE = 15;     // deg/s
-const byte SWEEPS = 2;           // full swings before going back to SCAN
+const byte SWEEPS = 1;           // swings before going back to SCAN: +45 then -45 = 135 deg, 9 s
+                                 // (the next beacon is usually somewhere else: don't linger)
 const float ARRIVED_DEG = 10;    // GOTO close enough -> SWEEP
 const float PINGPONG_DEG = 45;   // GOTO this far (not 90) when the last GOTO came from the other side
 const float GOTO_RATE = 40;      // deg/s, the GOTO target moves to the goal this fast
