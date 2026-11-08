@@ -6,7 +6,7 @@
 //                                                     A0 keeps seeing it, at least FIRING_MS)
 //   A0 strongest but below FIRE_MIN_US             -> fine search: 2 deg steps, hill-climb on A0
 //   A1 (right) / A3 (left) / A2 (back) strongest   -> turn -90 / +90 / 180 (45 if ping-pong)
-//   nothing seen                                    -> stay and hold
+//   nothing seen for 2 s (4 still frames)           -> turn 45 and look again
 // Nothing in loop() blocks: gyro, PD and sensors must run every pass.
 // Power on with the satellite HANGING and STILL (gyro calibrates for 2 s, LED on).
 
@@ -32,6 +32,10 @@ const unsigned long A0_SAT_US = 119000;
 const float FINE_STEP = 2;             // deg per step (A0's saturated top is about 6 deg wide)
 const byte FINE_MAX = 15;              // give up after 15 steps (30 deg), start again next frame
 const float PINGPONG_TURN = 45;        // coarse turn when the last one went the other way
+
+// ---- empty search (nothing seen) ----
+const byte EMPTY_FRAMES = 4;           // still frames with nothing seen before a search turn (2 s)
+const float SEARCH_TURN = 45;          // sensors are 90 apart: a 45 turn puts one on every blind gap
 
 // ---- direction rule ----
 const unsigned long SEEN_MIN_US = 2000;  // at or above this = lit (blips reach ~1200)
@@ -59,6 +63,8 @@ float fineDir = 0;                     // +FINE_STEP / -FINE_STEP, 0 = not fine 
 unsigned long lastA0 = 0;              // A0 at the last fine step
 byte fineSteps = 0;
 int lastCoarse = 0;                    // last 90 turn: +1 left, -1 right, 0 none
+byte emptyFrames = 0;                  // still frames in a row with nothing seen
+int searchDir = 1;                     // +1 anticlockwise, flips at the wire limit
 
 //---------------------------------------------------------------------------------------------------------
 void fireLaser() {
@@ -116,7 +122,7 @@ void printDecision(Decision d) {
                : d == TURN_RIGHT ? "A1: TURN -90"
                : d == TURN_LEFT  ? "A3: TURN +90"
                : d == TURN_BACK  ? "A2: TURN 180"
-               :                   "NONE: HOLD");
+               :                   "NONE: SEARCH 45 AFTER 2 s");
 }
 
 // A0 strongest but weak: step 2 deg. Start towards the brighter of A3 (left) / A1 (right),
@@ -145,16 +151,26 @@ void coarseTurn(int dir) {
   pdTurnBy(dir * deg);
 }
 
-// Any decision that isn't a fine step ends the fine search.
+// Nothing seen for EMPTY_FRAMES still frames: turn 45 the search way.
+// Turn round at +-360 so the wire can't wind up (not a 315 turn the other way).
+void emptySearch() {
+  if (++emptyFrames < EMPTY_FRAMES) return;
+  emptyFrames = 0;
+  if (fabs(pdHoldAngle() + searchDir * SEARCH_TURN) > 360) searchDir = -searchDir;
+  pdTurnBy(searchDir * SEARCH_TURN);
+}
+
+// Any decision that isn't a fine step / empty frame ends that search.
 void decide(Decision d, const SensorFrame &f) {
   if (d != FINE) fineDir = 0;
+  if (d != NONE) emptyFrames = 0;
   if (d != TURN_LEFT && d != TURN_RIGHT) lastCoarse = 0;
 
   if (d == FINE) fineStep(f);
   else if (d == TURN_RIGHT) coarseTurn(-1);
   else if (d == TURN_LEFT) coarseTurn(+1);
   else if (d == TURN_BACK) pdTurnBy(180);
-  // NONE: stay and hold
+  else if (d == NONE) emptySearch();
 }
 
 // Calibrate until the gyro reads still: after each 2 s calibration (LED on),
@@ -235,6 +251,7 @@ void loop() {
     fireLaser();
     fineDir = 0;
     lastCoarse = 0;
+    emptyFrames = 0;
     return;
   }
   if (!pdStill() || f.onStartMs < pdStillSinceMs()) return;  // moves only from readings taken on target
