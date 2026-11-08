@@ -15,7 +15,7 @@ const int LASER_PIN = 12;
 const unsigned long FIRING_MS = 2500;  // brief needs 2 s, 0.5 s spare for clock error
 
 // ---- turning ----
-const float TURN_STEP = 10;            // deg per turn
+const float TURN_STEP = 90;            // deg per turn
 const float MAX_ANGLE = 360;           // deg either way, so the wire can't wind up
 const byte STARTUP_READS = 4;          // 4 reads = 2 s before the first turn
 
