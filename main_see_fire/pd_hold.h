@@ -19,6 +19,7 @@
 
 void pdBegin();                   // motor pins, brake, encoder interrupts
 void pdHoldHere();                // hold the gyro angle the body is at now
+void pdStopHere();                // stop any move now (brake) and hold where it is
 void pdTurnBy(float deg);         // turn the body by deg, then hold there
 void pdUpdate();                  // runs the PD and the hold, every loop
 bool pdStill();                   // on the hold angle and not moving

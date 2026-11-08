@@ -257,13 +257,15 @@ void loop() {
   const SensorFrame &f = sensorFrame();
 
   Decision d = choose(f);
-  if (d == FIRE) {                     // A0 high: shoot, whatever the body is doing
+  if (d == FIRE) {                     // A0 high: shoot
+    if (!pdStill()) pdStopHere();      // seen while moving: stop here and hold this angle
     fireLaser();
     fineDir = 0;
     lastCoarse = 0;
     emptyFrames = 0;
     return;
   }
+  if (laserOn) return;                 // firing: no turns or fine steps, only the hold
   if (!pdStill() || f.onStartMs < pdStillSinceMs()) return;  // moves only from readings taken on target
 
   // Prints off: it runs hanging with no USB.

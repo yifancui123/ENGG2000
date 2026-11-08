@@ -162,6 +162,16 @@ void pdHoldHere() {
   lastMoveEndMs = millis();
 }
 
+// Stop any move now and hold the angle the body is at.
+void pdStopHere() {
+  brake();
+  moving = false;
+  learnNext = false;                   // a cut-short turn can't teach the counts per degree
+  holdAngle = gyroAngle();
+  still = false;
+  lastMoveEndMs = millis();
+}
+
 // turn the body by deg (+ = anticlockwise / left), then hold there
 void pdTurnBy(float deg) {
   float end = holdAngle + deg;
