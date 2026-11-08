@@ -20,8 +20,12 @@ const float MAX_ANGLE = 360;           // deg either way, so the wire can't wind
 const byte STARTUP_READS = 4;          // 4 reads = 2 s before the first turn
 
 // ---- fire rule ----
-// Front pulse must fill at least 80% of the window (96,000 us, same as Sprint 2)
-const unsigned long FIRE_MIN_US = (unsigned long)ON_MS * 1000UL * 8 / 10;
+// A0 at or above this = on the beacon. 8 Nov S2: 96,000 fired across 11 deg,
+// 110,000 across about 7 deg, 9,000 below the lowest real saturation (119,268).
+const unsigned long FIRE_MIN_US = 110000;
+
+// Unpowered sensors all read 119,820-119,980 and look saturated (8 Nov R5-R8)
+const unsigned long NO_POWER_US = 119800;
 
 // ---- aim check ----
 const float FIRE_TOL = 1.0;            // deg, fire only this close to the held angle
@@ -94,6 +98,13 @@ SensorId strongestSide(const SensorFrame &f) {
     }
   }
   return best;
+}
+
+// All four at the no-power level: sensor power is lost, not a real reading
+bool noPower(const SensorFrame &f) {
+  for (int i = 0; i < sensorNum; i++)
+    if (f.strength[i] < NO_POWER_US) return false;
+  return true;
 }
 
 // SENSOR_TEST: print what the robot would do with this frame.
@@ -199,6 +210,10 @@ void loop() {
     Serial.print(F(" gyro "));
     Serial.print(gyroAngle(), 1);
     printDecision(f);                    // prints "\t-> FIRE / A3: TURN ..." + newline
+  }
+  if (noPower(f)) {
+    Serial.println(F("\tSENSOR POWER LOST - check D4"));
+    return;
   }
   decide(f);
 }
