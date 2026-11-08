@@ -1,132 +1,130 @@
 # main_see_fire: improvement plan
 
-Starting point: branch `sprint2-see-fire`, commit `71f3c31` (8 Nov 2026).
+Branch `sprint2-see-fire`. Rewritten 8 Nov 2026 after the new gyro was fitted.
 
-The current code finds the beacon in 10° steps and fires as soon as A0 crosses 96,000. It works end to end. It is **slow to find** the beacon (up to 18 steps) and it **fires at the edge** of A0's view, not the centre.
-
-How we work: one step at a time. Each code change is shown first, made only once approved, then committed and tested on the hanging robot. Results go in the table at the bottom.
+How we work: one step at a time. Each test gives numbers first. Each code change is shown first, made only once approved, committed on its own, then tested. Results go in the table at the bottom.
 
 ---
 
-## Tomorrow (8 Nov): checklist
+## The new scheme
 
-1. **New gyro:** fit a new MPU6050 with the headers soldered. VCC → 5V, GND → GND, SDA → A4, SCL → A5. Run `mpu_raw_test`: when still, one `acc` axis should read about ±16000, and `gyro` should change when the body is turned. The old module reads all 0 and is dead.
-2. **Motor check:** with the 12 V battery on, run `motor_encoder_test` and type `10`, `-10`, `90`. Each should print `DONE`. Hanging and seen from above, `+` must turn the body anticlockwise. After a reset the direction must not flip. If it does, the PMODE→GND wire is loose again.
-3. **Step 0 baseline:** upload `main_see_fire` with the robot hanging and still for 7 s. Record the numbers listed under Step 0.
-4. **A0 scan (`a0_scan_test`):** beacon 1 m away at A0's height, robot hanging, battery on.
-   1. Power on and keep still for 2 s.
-   2. `l` turns the laser on. Type small angles, e.g. `2` or `-1`, until the laser is on the bullseye.
-   3. `z` sets that angle as 0. Then `l` turns the laser off.
-   4. `g` starts the scan: -15° → +15° → -15° in 1° steps, 3 frames each, about 3 min.
-   5. Paste all `SCAN`, `STEP` and summary lines back.
-5. **Decide the fire logic** from the scan (see Step 1, option D).
+1. **Coarse (A1-A3 + gyro):** A1-A3 are read as 1/0 (1 = LOW pulse of 2000 us or more). The pattern gives a rough direction to the beacon. Its world angle is β = gyro angle + that direction. The robot turns A0 to β.
+2. **Fine (A0, gyro executes):** small steps around β. If A0 goes up, keep going the same way; if it goes down, turn back. The gyro makes each step and holds still before the next read.
+3. **Fire:** A0 at or above the fire level (about 119,200, set by T3) and the body still: fire. The gyro holds the angle for the 2.5 s shot.
+4. **Remember:** the gyro angle at each hit is saved as target 1/2/3. Next time a side sensor sees a beacon near a saved angle, turn straight there, let A0 confirm, fire.
 
-The test sketches are in the repo root: `mpu_raw_test/`, `motor_encoder_test/` and `a0_scan_test/`. Their library files are copies. `motor_encoder_test` uses the PD folder's `motor.cpp`, which doesn't pull PH low when braking, so keep the battery within reach.
+Roles: A1-A3 know roughly which side. The gyro knows where the body points and how far it turned, but can't see the beacon. Only A0 knows when it is exactly on target.
 
 ---
 
-## Step 0: baseline test with a new gyro (no code change)
+## Where things stand (8 Nov)
 
-**Why:** every later step needs real numbers.
-
-**Before starting:** fit a new MPU6050, run `mpu_raw_test` (one acc axis about ±16000), connect the 12 V battery and hang the robot.
-
-**Measure:**
-- **Time per 10° step:** from `-> TURN` to the next printed line.
-- **Turn accuracy:** after a turn, how close is `gyro` to `hold`? Does the body really turn left for A3 and right for A1?
-- **Hold:** does the angle drift during the 2.5 s laser shot?
-- **Aim:** where does the laser land on the target the first time it fires? Measure the distance from the bullseye in cm.
-- **Total:** time from the beacon switching on to the first shot, with the beacon at 90° and at 180°.
-
-**Done when:** the table has these numbers for at least 3 runs.
+- New MPU6050 works. Sign: + is anticlockwise from above. On the floor it drifts about 0.5° per minute.
+- Motor sign checked: `10` turns the body anticlockwise, `-10` clockwise. Motor and encoder agree.
+- Hanging, the string and USB cable twist the body about 0.5°/s, and calibrating while it twists gives a false gyro bias.
+- A sensor with no power reads 119,980 (LOW from the first instant), which looks like saturation. The D4 joint came loose today. A real saturated reading is about 119,5xx-119,7xx and differs between sensors.
+- If the battery is off while the code runs, the wheel target keeps building up. Plugging the battery in then made the robot spin about 4.5 turns. **Always connect the battery first, then reset.**
 
 ---
 
-## Step 1: aim at the centre of A0, not the edge (biggest score gain)
+## Part 1: tests before any code
 
-**Problem:** the first frame where A0 is at or above 96,000 is at the edge of A0's view. With the tube, A0 stays saturated about 10° off-axis. The bullseye is ±2.3° at 1 m, and the outer ring is ±6.9°.
+### T0: test setup
+| What | How | Decides | Pass |
+|---|---|---|---|
+| String and USB twist | Battery off, hang still 60 s, watch `gyro` | Whether bench tests mean anything | Under 0.1°/s (swivel, USB hung loose from the same point) |
+| String pull-back | Twist 45° by hand, let go. Time one swing, note where it stops | Largest safe turn | No clear spring-back |
+| Start order | Battery first, then reset, hand-hold still for 7 s | No spin at start | Never spins at start |
 
-**Test first (no code change):** with `SENSOR_TEST = true` and the beacon at 1 m, turn the robot by hand in 2° steps from -20° to +20°. Record A0 at each angle. This shows where A0 crosses 96,000 on each side and whether the two sides are equal. Earlier data hinted they are not: about 10-20° on one side, and under 10° on the other.
+### T1: how far one turn can go
+`a0_scan_test`: type `10`, `20`, `45`, `90`, `135`, `180` in turn. For each, record the time to `at ...`, the error at the end, and the drift over the next 10 s.
+Decides the largest coarse jump (90° or 45°) and whether 180° is split in two.
+Pass: within 1°, under 1° of drift in 10 s.
 
-**Hand sweep, 7-8 Nov night.** Beacon at 1 m, robot turned by hand, so angles are about ±2°:
+### T2: side sensor field of view
+Beacon 1 m away. `main_see_fire`, battery off, turn by hand to 0°, 22.5°, ... 337.5° (16 positions). At each, record `gyro` and A0-A3 from 2 lines. Repeat at 0.5 m and 1.5 m.
+Decides the direction table for each 1/0 pattern, whether 2000 us is the right "seen" level (noise reaches about 800), any blind gaps, whether A3 works, and whether the sides all saturate together when close.
+Pass: every pattern points within ±30° of the real direction, no blind gaps.
+
+### T3: A0 angle curve
+`a0_scan_test` `g`: -15° to +15° in 1° steps and back. Then the same to ±30°.
+Decides the fire level, A0's centre offset from the laser, the fine step size (1° or 2°), and how wide the zone is where A0 rises towards the centre.
+Pass: the edges match within 1° between the up and down sweeps.
+
+Hand sweep from 7-8 Nov (beacon at 1 m, angles about ±2°), for reference:
 
 | Angle | A0 left | A0 right |
 |---|---|---|
 | 0° | 119,524-119,684 (saturated) | same |
 | ~2° | not measured | 111,260-113,180 |
 | ~4-5° | not measured | 107,952-109,544 |
-| 10° | 116,620-118,744 | 111,384-115,008 (separate run) |
+| 10° | 116,620-118,744 | 111,384-115,008 |
 | 20° | 96,324-97,296 | 96,260-99,352 |
 | 30° | 93,304-95,428 | 94,000-95,436 |
 | 45°+ | | 102,000-104,000 |
 
-What this shows:
-- A0 saturates only very close to straight on. About 2° to the right it already reads about 111k.
-- 96,000 is far too low. It fires even 45° off, because leaks and reflections leave a floor of 93-104k at every angle past 20°.
-- A threshold of about **119,200** splits straight on (lowest seen 119,524) from left 10° (highest seen 118,744).
-- Left looks wider than right, so A0's centre may sit a little left of the 0° mark.
-- Past 20°, A1-A3 pick the right way. At 10° they can pick the wrong way (left 10°: A3 104k > A1 98k).
-- Risk: with a ~2° saturated zone, 10° steps can jump over it. Near the beacon the robot needs small steps.
+So 96,000 fires even 45° off. About 119,200 splits straight-on from 10° off. Past 20° a leak floor of 93-104k means A0 can't tell direction.
 
-**Next:** run `a0_scan_test` with a working gyro. The robot turns itself in 1° steps from -15° to +15° and logs A0 against the gyro angle.
+### T4: A0 frame noise
+Hold at 0°, 2° and 5°, 20 frames each.
+Decides whether one frame is enough to say "A0 went up" or 2-3 frames must be averaged, and how big a change counts.
+Pass: the spread at one angle is smaller than the step between neighbouring degrees.
 
-**Options, chosen by that data:**
-- **A. Calibrated overshoot (fast):** A0 crosses the threshold while turning, so keep turning the same way by half of A0's measured view width, then fire. This costs one extra turn and only works if the edges are consistent.
-- **B. Edge-to-edge scan (accurate, slower):** after the first crossing, keep turning in 2-3° steps until A0 drops below the threshold. That is the second edge. Turn back to the middle of the two edges and fire. This costs about 5-8 extra steps.
-- **C. Make A0 narrower (hardware):** use a longer tube or a smaller hole, so A0 is only saturated within ±2-3°. That makes the current code accurate with no code change. Fixing the A0 light leak belongs here too.
-- **D. Three zones (most likely, after the hand sweep):**
-  - A0 below about 100,000: use the side sensors and big turns.
-  - A0 between about 100,000 and 119,200: the beacon is near. Turn 1-2° at a time. If A0 goes up, keep going the same way. If it goes down, turn back.
-  - A0 at or above 119,200: hold still and fire. If the scan shows A0's centre is off from the laser, add that offset first.
-  The exact numbers come from the `a0_scan_test` result.
+### T5: hold during a shot
+On the bullseye, `l` laser on, watch the dot for 3 s.
+Decides whether the 2.5 s shot stays in the zone or needs a longer settle first.
+Pass: the dot stays in the 8 cm bullseye (±4 cm).
 
-**Done when:** in 5 runs, the laser lands within the 16 cm ring each time, ideally in the 8 cm bullseye.
+### T6: how well the gyro remembers an angle
+Laser on the bullseye, `z`. Then `90`, `-90`, `0`, five times. Measure how far the dot lands from the mark each time. Then hold 5 min and measure again.
+Decides whether a saved angle can be fired at directly or A0 must re-check first.
+Pass: within 2° (3.5 cm at 1 m) after 5 round trips.
 
 ---
 
-## Step 2: big turns from the side sensors (faster search)
+## Part 2: code changes (each shown first, one commit each)
 
-**Problem:** 10° per step means 9 steps for a beacon at the side and 18 steps for one behind.
+| # | Change | Based on |
+|---|---|---|
+| C1 | Safety: a reading of 119,900 or more is a sensor fault, never a fire | Today's no-power reading |
+| C2 | Safety: don't let the wheel target build up while the motor can't move | Today's spin |
+| C3 | Fire on the same frame, if the gyro rate is under about 2°/s | T5 |
+| C4 | A1-A3 as 1/0 → direction table → β → turn to β | T1, T2 |
+| C5 | A0 fine search around β; fire at the fire level | T3, T4 |
+| C6 | Save hit angles as targets 1-3; go straight there next time | T6 |
 
-**Idea:** the side sensors are 90° apart, so the strongest one already says roughly where the beacon is (within ±45°):
-- A3 (left) strongest → turn **+90°**.
-- A1 (right) strongest → turn **-90°**.
-- A2 (back) strongest → turn **180°**, taking whichever way keeps the wire inside ±360°.
-- Then A0 and small steps finish the job.
+C1 and C2 don't need any test data.
 
-**Risk:** a 90° jump can overshoot by up to 45°. If tests show overshoot, try 60° jumps.
+## Part 3: tests after the code
 
-**Done when:** a beacon at 90° or 180° is reached in 3 turns or fewer, and Step 0's total time is at least halved.
+| Change | Test | Pass |
+|---|---|---|
+| C1 | Pull the D4 wire | Prints FAULT, no laser |
+| C2 | Run 10 s with the battery off, then connect it | No spin |
+| C3 | Beacon in the tube; time from FIRE print to laser on | Under 0.2 s. Prints HOLD while swinging |
+| C4 | Beacon at 90°, 135°, 180°, -90°, 3 runs each | Within ±30° of β in 1-2 turns, never past ±360° |
+| C5 | Start 10° and 20° off on each side | Always centres; in 5 runs the dot is in the 16 cm ring, ideally the 8 cm bullseye; never fires off target |
+| C3 + C5 | Watch the dot during the 2.5 s shot | Stays in the same ring |
+| C6 | Hit target 1, then 2, then target 1 again | Second visit fires within 4 s, no search |
+| All | 3 beacons at random, full 5 min, 3 runs | Every run scores 5 or more; aim for 150+ |
 
----
+Order: T0 → T1 → T2 → T3 with T4 → T5 → T6. C1 and C2 can be written any time.
 
-## Step 3: don't trust a single reading
-
-**Problem:** with the beacon still, the side sensors jump between frames (A3: 132 → 50,000 → 132). Close up, A1-A3 all saturate at about 119,500, so "the strongest one" is random.
-
-**Ideas:**
-- Turn only when two frames in a row pick the same side. This costs one extra frame (0.5 s) per decision.
-- When two or more sides are saturated, don't pick one. Look again, or use A0.
-- Find out why A3 flickers: check the beacon's on/off pattern, the sensor power timing, and reflections.
-
-**Done when:** in 5 runs the robot never turns the wrong way first.
-
----
-
-## Step 4: smaller fixes
-
-- **A0 half-lit:** when A0 reads 20,000-96,000, the beacon is close in front. Take small steps towards the brighter of A1 and A3 instead of the blind search.
-- **Wire limit:** every turn, not only the search, must keep the body within ±360° so the hanging wire can't wind up.
-- **Fire threshold:** re-check 96,000 after Step 1 and the A0 leak fix.
+The test sketches are in the repo root: `mpu_raw_test/`, `motor_encoder_test/` and `a0_scan_test/`. Their library files are copies. `motor_encoder_test` uses the PD folder's `motor.cpp`, which doesn't pull PH low when braking, so keep the battery within reach.
 
 ---
 
 ## Results
 
-| Step | Date | What we tried | Result | Keep? |
-|---|---|---|---|---|
-| 0 | | baseline, new gyro | | |
-| 1 | 7-8 Nov | hand sweep of A0, ±30° | A0 saturated only near 0°; 96,000 fires up to 45° off; about 119,200 looks right | need a gyro scan |
-| 2 | | | | |
-| 3 | | | | |
-| 4 | | | | |
+| Test | Date | Result | Decision |
+|---|---|---|---|
+| Gyro sign | 8 Nov | + is anticlockwise; floor drift about 0.5°/min | keep GYRO_SIGN |
+| Motor sign | 8 Nov | `10` anticlockwise, `-10` clockwise; ±10 and ±30 DONE | keep TURN_SIGN |
+| T0 | | | |
+| T1 | | | |
+| T2 | | | |
+| T3 | 7-8 Nov (hand) | see the table under T3 | need the gyro scan |
+| T4 | | | |
+| T5 | | | |
+| T6 | | | |
+| C1-C6 | | | |
