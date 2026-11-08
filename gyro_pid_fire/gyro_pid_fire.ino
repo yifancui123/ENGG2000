@@ -50,6 +50,7 @@ const float ANGLE_KI = 0.4;      // slowly cancels drift / string twist
 const float ANGLE_KD = 0.25;     // damping from the gyro rate (stops overshoot)
 const float MAX_RATE = 45;       // deg/s, top body speed
 const float MAX_I = 15;          // deg/s, cap on the integral part
+const float I_ZONE = 10;         // deg, only integrate this close to the target (no windup on big turns)
 const int GYRO_SIGN = 1;         // + must be anticlockwise; if it runs away, set -1
 
 // ---------------- wheel speed (encoder PD follows a moving target) ----------------
@@ -277,7 +278,7 @@ void control() {
     Serial.println(F("STOPPED: body went the wrong way - check GYRO_SIGN / gyro wiring"));
     return;
   }
-  integral = constrain(integral + ANGLE_KI * err * dt, -MAX_I, MAX_I);
+  if (fabs(err) < I_ZONE) integral = constrain(integral + ANGLE_KI * err * dt, -MAX_I, MAX_I);
   float want = targetRate + ANGLE_KP * err + integral - ANGLE_KD * (bodyRate - targetRate);
   want = constrain(want, -MAX_RATE, MAX_RATE);
 
