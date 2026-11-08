@@ -25,7 +25,8 @@
 // Wiring: 4 x TSSP VS -> D4, OUT front A0, right A1, back A2, left A3.
 //   laser D12. motor: encoder D2/D3, EN D5, PH D6, nSLEEP D7, PMODE -> GND.
 //   gyro MPU6050: SDA A4, SCL A5.
-// Power on HANGING and STILL (3 s hands off, LED on 2 s = gyro calibration).
+// Power on HANGING and STILL (3 s hands off, LED on 2 s = gyro calibration;
+// 3 short blinks = it moved, calibrating again, up to 5 times).
 // SENSOR_TEST = true: sensors + laser only (motor off), prints every reading.
 
 #include <Wire.h>
@@ -93,6 +94,8 @@ const float RUNAWAY_DEG = 150;            // this far off the target = something
 // ---------------- gyro ----------------
 const byte MPU_ADDR = 0x68;
 const float LSB_PER_DPS = 65.5;
+const float GYRO_STILL_DEG = 1.0;     // moved more than this in the 1 s check = calibrate again
+const byte GYRO_TRIES = 5;
 
 // ================= state =================
 enum State { SCAN, GOTO, SWEEP, FIRE };
@@ -234,6 +237,35 @@ void gyroRead(float dt) {
   for (byte i = 0; i < 3; i++) about += (g[i] - gyroBias[i]) * gyroUp[i];
   bodyRate = GYRO_SIGN * about / LSB_PER_DPS;
   bodyAngle += bodyRate * dt;
+}
+
+// Calibrate until the gyro reads still: after each 2 s calibration (LED on),
+// watch 1 s. Moved more than GYRO_STILL_DEG -> the body was moving while
+// calibrating (false bias = drift later): 3 short blinks, calibrate again.
+void calibrateStill() {
+  for (byte tries = 0; tries < GYRO_TRIES; tries++) {
+    digitalWrite(LED, HIGH);
+    gyroCalibrate(2000);                 // HANGING and STILL
+    digitalWrite(LED, LOW);
+    unsigned long t0 = millis();
+    unsigned long last = micros();
+    while (millis() - t0 < 1000) {       // 1 s check
+      unsigned long now = micros();
+      if (now - last >= LOOP_US) {
+        gyroRead((now - last) / 1000000.0);
+        last = now;
+      }
+    }
+    if (fabs(bodyAngle) < GYRO_STILL_DEG) break;
+    for (byte i = 0; i < 3; i++) {       // moved: blink, try again
+      digitalWrite(LED, HIGH);
+      delay(150);
+      digitalWrite(LED, LOW);
+      delay(150);
+    }
+  }
+  bodyAngle = 0;
+  bodyRate = 0;
 }
 
 // ================= moving the target (scan / sweep) =================
@@ -489,9 +521,7 @@ void setup() {
     }
   }
   delay(3000);                            // hands off, let it stop swinging
-  digitalWrite(LED, HIGH);
-  gyroCalibrate(2000);                    // HANGING and STILL
-  digitalWrite(LED, LOW);
+  calibrateStill();                       // HANGING and STILL, redone if it was moving
 
   targetAngle = 0;
   lastCount = getCount();
