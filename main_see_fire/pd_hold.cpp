@@ -25,7 +25,7 @@ static const int TURN_SIGN = -1;        // + wheel counts turn the body clockwis
 static const float HOLD_TOL = 1.0;      // deg, hold corrects above this
 static const unsigned long CHECK_MS = 300;  // wait after a move before checking again
 static const float MAX_ANGLE = 360;     // deg either way, so the wire can't wind up
-static const bool DEBUG = true;
+static const bool DEBUG = false;  // prints are commented out: runs hanging with no USB
 
 // ================= state =================
 static volatile long pos = 0;
@@ -123,7 +123,7 @@ static void holdUpdate() {
     float turned = gyroAngle() - turnStartAngle;
     float commanded = TURN_SIGN * turnCounts / countsPerDeg;
     if (turned * commanded < 0) {
-      Serial.println(F("WARNING: gyro turned the other way - set GYRO_SIGN = -1"));
+      // Serial.println(F("WARNING: gyro turned the other way - set GYRO_SIGN = -1"));
     } else if (fabs(turned) > 10) {
       float cpd = fabs(turnCounts / turned);
       if (cpd > COUNTS_PER_DEG / 3 && cpd < COUNTS_PER_DEG * 3) countsPerDeg = cpd;
@@ -173,12 +173,12 @@ void pdTurnBy(float deg) {
   learnNext = fabs(deg) >= 30;
   moveBy(turnCounts);
   still = false;
-  if (DEBUG) {
-    Serial.print(F("turn "));
-    Serial.print(deg, 0);
-    Serial.print(F(" -> hold "));
-    Serial.println(holdAngle, 1);
-  }
+  // if (DEBUG) {
+  //   Serial.print(F("turn "));
+  //   Serial.print(deg, 0);
+  //   Serial.print(F(" -> hold "));
+  //   Serial.println(holdAngle, 1);
+  // }
 }
 
 void pdUpdate() {

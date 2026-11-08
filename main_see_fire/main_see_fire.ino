@@ -33,7 +33,7 @@ const unsigned long NO_POWER_US = 119800;
 const unsigned long SEEN_MIN_US = 2000;  // at or above this = lit (blips reach ~1200)
 
 // ---- debug printing ----
-const bool DEBUG = true;
+const bool DEBUG = false;   // prints are commented out: runs hanging with no USB
 const bool SENSOR_TEST = false; // true = sensors and laser only: no motor or gyro
 const char* SENSOR_NAMES[sensorNum] = { "A0", "A1", "A2", "A3" };
 
@@ -53,7 +53,7 @@ unsigned long laserUntilMs = 0;
 
 //---------------------------------------------------------------------------------------------------------
 void fireLaser() {
-  if (!laserOn) Serial.println(F("FIRE"));
+  // if (!laserOn) Serial.println(F("FIRE"));
   laserOn = true;
   laserUntilMs = millis() + FIRING_MS;
   digitalWrite(LASER_PIN, HIGH);
@@ -163,7 +163,7 @@ void setup() {
   pdBegin();      // motor pins, brake, encoder interrupts
 
   if (!gyroBegin()) {
-    Serial.println(F("No gyro, check A4/A5"));
+    // Serial.println(F("No gyro, check A4/A5"));
     while (true) {                     // no gyro: LED blinks fast
       digitalWrite(LED, !digitalRead(LED));
       delay(100);
@@ -172,7 +172,7 @@ void setup() {
   delay(SETTLE_DELAY_MS);
   calibrateStill();     // satellite hanging STILL, redone if it was moving
   pdHoldHere();
-  Serial.println(F("main_see_fire started"));
+  // Serial.println(F("main_see_fire started"));
 }
 
 //---------------------------------------------------------------------------------------------------------
@@ -199,16 +199,17 @@ void loop() {
   if (!pdStill() || f.onStartMs < pdStillSinceMs()) return;  // only readings taken on target
 
   Decision d = choose(f);
-  if (DEBUG) {
-    printFrame(f);
-    Serial.print(F("\thold "));
-    Serial.print(pdHoldAngle(), 1);
-    Serial.print(F(" gyro "));
-    Serial.print(gyroAngle(), 1);
-    printDecision(d);
-  }
+  // Prints off: it runs hanging with no USB.
+  // if (DEBUG) {
+  //   printFrame(f);
+  //   Serial.print(F("\thold "));
+  //   Serial.print(pdHoldAngle(), 1);
+  //   Serial.print(F(" gyro "));
+  //   Serial.print(gyroAngle(), 1);
+  //   printDecision(d);
+  // }
   if (noPower(f)) {
-    Serial.println(F("\tSENSOR POWER LOST - check D4"));
+    // Serial.println(F("\tSENSOR POWER LOST - check D4"));
     return;
   }
   decide(d);
