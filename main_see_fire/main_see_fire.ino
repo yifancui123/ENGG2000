@@ -39,6 +39,10 @@ const char* SENSOR_NAMES[sensorNum] = { "A0", "A1", "A2", "A3" };
 
 const int SETTLE_DELAY_MS = 3000;      // hands off, let it stop swinging
 
+// ---- gyro calibration check ----
+const float GYRO_STILL_DEG = 1.0;      // deg moved in the 1 s check (string twist is about 0.5)
+const byte GYRO_TRIES = 5;
+
 // LEFT and RIGHT are the body's own sides, looking out along A0 and the laser.
 // A person standing in front of A0 and facing it sees A1 on their left.
 enum SensorId { FRONT, RIGHT, BACK, LEFT };
@@ -121,6 +125,27 @@ void decide(Decision d) {
   // WAIT / NONE: stay and hold
 }
 
+// Calibrate until the gyro reads still: after each 2 s calibration (LED on),
+// watch 1 s. Moved more than GYRO_STILL_DEG -> the body was moving while
+// calibrating: 3 short LED blinks, then calibrate again (up to GYRO_TRIES).
+void calibrateStill() {
+  for (byte tries = 0; tries < GYRO_TRIES; tries++) {
+    digitalWrite(LED, HIGH);
+    gyroCalibrate(2000);               // HANGING and STILL
+    digitalWrite(LED, LOW);
+    unsigned long t0 = millis();
+    while (millis() - t0 < 1000) gyroUpdate();   // 1 s check
+    if (fabs(gyroAngle()) < GYRO_STILL_DEG) break;
+    for (byte i = 0; i < 3; i++) {     // moved: blink, try again
+      digitalWrite(LED, HIGH);
+      delay(150);
+      digitalWrite(LED, LOW);
+      delay(150);
+    }
+  }
+  gyroResetAngle();
+}
+
 //---------------------------------------------------------------------------------------------------------
 void setup() {
   Serial.begin(115200);
@@ -145,9 +170,7 @@ void setup() {
     }
   }
   delay(SETTLE_DELAY_MS);
-  digitalWrite(LED, HIGH);
-  gyroCalibrate(2000);  // satellite hanging STILL
-  digitalWrite(LED, LOW);
+  calibrateStill();     // satellite hanging STILL, redone if it was moving
   pdHoldHere();
   Serial.println(F("main_see_fire started"));
 }
