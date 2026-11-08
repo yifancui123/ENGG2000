@@ -1,5 +1,7 @@
 // MQ Sentinel - see it, fire the laser (motor logic from simple_pd_fire)
-// Loop: read the sensors only once the body is on its hold angle and still.
+// Loop: every sensor frame is checked for FIRE straight away (moving or not).
+// Turns use only frames read once the body is on its hold angle and still.
+//   A0 >= A0_SAT_US                                 -> laser ON
 //   A0 >= FIRE_MIN_US and A0 >= the strongest side -> laser ON (stays on while
 //                                                     A0 keeps seeing it, at least FIRING_MS)
 //   A0 strongest but below FIRE_MIN_US             -> stay and hold, look again
@@ -25,9 +27,6 @@ const unsigned long FIRE_MIN_US = 110000;
 // A0 at or above this is saturated: on the beacon whatever the sides read.
 // Close up a side sensor saturates too and can beat A0 by noise (119,268-119,760).
 const unsigned long A0_SAT_US = 119000;
-
-// Unpowered sensors all read 119,820-119,980 and look saturated (8 Nov R5-R8)
-const unsigned long NO_POWER_US = 119800;
 
 // ---- direction rule ----
 const unsigned long SEEN_MIN_US = 2000;  // at or above this = lit (blips reach ~1200)
@@ -86,13 +85,6 @@ SensorId strongestSide(const SensorFrame &f) {
     }
   }
   return best;
-}
-
-// All four at the no-power level: sensor power is lost, not a real reading
-bool noPower(const SensorFrame &f) {
-  for (int i = 0; i < sensorNum; i++)
-    if (f.strength[i] < NO_POWER_US) return false;
-  return true;
 }
 
 Decision choose(const SensorFrame &f) {
@@ -196,9 +188,14 @@ void loop() {
 
   if (!sensorsNewFrame()) return;
   const SensorFrame &f = sensorFrame();
-  if (!pdStill() || f.onStartMs < pdStillSinceMs()) return;  // only readings taken on target
 
   Decision d = choose(f);
+  if (d == FIRE) {                     // A0 high: shoot, whatever the body is doing
+    fireLaser();
+    return;
+  }
+  if (!pdStill() || f.onStartMs < pdStillSinceMs()) return;  // turns only from readings taken on target
+
   // Prints off: it runs hanging with no USB.
   // if (DEBUG) {
   //   printFrame(f);
@@ -208,9 +205,5 @@ void loop() {
   //   Serial.print(gyroAngle(), 1);
   //   printDecision(d);
   // }
-  if (noPower(f)) {
-    // Serial.println(F("\tSENSOR POWER LOST - check D4"));
-    return;
-  }
   decide(d);
 }
