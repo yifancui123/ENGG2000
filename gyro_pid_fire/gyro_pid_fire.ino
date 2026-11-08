@@ -70,6 +70,7 @@ const float SWEEP_HALF = 30;     // deg either side of the spot
 const float SWEEP_RATE = 15;     // deg/s
 const byte SWEEPS = 2;           // full swings before going back to SCAN
 const float ARRIVED_DEG = 10;    // GOTO close enough -> SWEEP
+const float PINGPONG_DEG = 45;   // GOTO this far (not 90) when the last GOTO came from the other side
 const float GOTO_RATE = 40;      // deg/s, the GOTO target moves to the goal this fast
                                  // (a jump would trip the runaway check: 180 deg > RUNAWAY_DEG)
 const float MAX_ANGLE = 360;     // deg either way, so the wire can't wind up
@@ -108,6 +109,7 @@ float bodyRate = 0;              // deg/s
 float targetAngle = 0;           // where the body should point, deg
 float targetRate = 0;            // how fast the target moves (scan / sweep), deg/s
 float gotoGoal = 0;              // GOTO: where the target is heading, deg
+int lastGotoSide = -1;           // side sensor that started the last GOTO, -1 = none since FIRE / SCAN
 float integral = 0;
 float wheelTarget = 0;
 long lastCount = 0;
@@ -311,6 +313,7 @@ void setState(State s) {
   if (s == state) return;
   state = s;
   if (s == SCAN) scanRate = SCAN_RATE;
+  if (s == SCAN || s == FIRE) lastGotoSide = -1;
   if (DEBUG) Serial.println(NAMES[s]);
 }
 
@@ -435,9 +438,14 @@ void decide() {
     if (strength[i] >= SIDE_MIN_US && (side < 0 || strength[i] > strength[side])) side = i;
   }
   if (side >= 0 && state != GOTO) {
-    if (side == RIGHT) goToSide(-90);
-    else if (side == LEFT) goToSide(90);
+    // just came from the opposite side: the beacon is between the two (~45 deg),
+    // so go half way instead of ping-ponging left-right 90 deg forever
+    bool back = (side == RIGHT && lastGotoSide == LEFT) || (side == LEFT && lastGotoSide == RIGHT);
+    float turn = back ? PINGPONG_DEG : 90;
+    if (side == RIGHT) goToSide(-turn);
+    else if (side == LEFT) goToSide(turn);
     else goToSide(180);
+    lastGotoSide = side;
     return;
   }
 
