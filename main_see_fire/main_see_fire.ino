@@ -23,6 +23,9 @@ const byte STARTUP_READS = 4;          // 4 reads = 2 s before the first turn
 // Front pulse must fill at least 80% of the window (96,000 us, same as Sprint 2)
 const unsigned long FIRE_MIN_US = (unsigned long)ON_MS * 1000UL * 8 / 10;
 
+// ---- aim check ----
+const float FIRE_TOL = 1.0;            // deg, fire only this close to the held angle
+
 // ---- direction rule ----
 const unsigned long SEEN_MIN_US = 2000;  // at or above this = lit (blips reach ~1200)
 
@@ -106,10 +109,15 @@ void printDecision(const SensorFrame &f) {
 
 void decide(const SensorFrame &f) {
   if (f.strength[FRONT] >= FIRE_MIN_US) {
-    // A0 sees it from here, so here is the target: hold this angle and fire now.
-    // (The old 1-degree check re-targeted every frame and never fired.)
-    steadyStartAt(gyroAngle());
-    fireLaser();
+    if (fabs(steadyHoldAngle() - gyroAngle()) < FIRE_TOL) {
+      fireLaser();
+    } else {
+      // A0 sees it from here, so here is the target: hold this angle,
+      // fire on the next frame taken once it is still
+      steadyStop();
+      steadyStartAt(gyroAngle());
+      still = false;
+    }
     return;
   }
 
