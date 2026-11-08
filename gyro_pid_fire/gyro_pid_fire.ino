@@ -68,6 +68,8 @@ const float SWEEP_HALF = 30;     // deg either side of the spot
 const float SWEEP_RATE = 15;     // deg/s
 const byte SWEEPS = 2;           // full swings before going back to SCAN
 const float ARRIVED_DEG = 10;    // GOTO close enough -> SWEEP
+const float GOTO_RATE = 40;      // deg/s, the GOTO target moves to the goal this fast
+                                 // (a jump would trip the runaway check: 180 deg > RUNAWAY_DEG)
 const float MAX_ANGLE = 360;     // deg either way, so the wire can't wind up
 
 // ---------------- sensors and firing ----------------
@@ -99,6 +101,7 @@ float bodyRate = 0;              // deg/s
 
 float targetAngle = 0;           // where the body should point, deg
 float targetRate = 0;            // how fast the target moves (scan / sweep), deg/s
+float gotoGoal = 0;              // GOTO: where the target is heading, deg
 float integral = 0;
 float wheelTarget = 0;
 long lastCount = 0;
@@ -239,8 +242,17 @@ void moveTarget(float dt) {
       }
     }
     targetRate = sweepDir * SWEEP_RATE;
+  } else if (state == GOTO) {
+    // ramp the target to the goal so the error stays small (a jump trips RUNAWAY_DEG)
+    float left = gotoGoal - targetAngle;
+    if (fabs(left) <= GOTO_RATE * dt) {
+      targetAngle = gotoGoal;
+      targetRate = 0;
+      return;
+    }
+    targetRate = left > 0 ? GOTO_RATE : -GOTO_RATE;
   } else {
-    targetRate = 0;                            // GOTO and FIRE: fixed target
+    targetRate = 0;                            // FIRE: fixed target
   }
   targetAngle += targetRate * dt;
 }
@@ -283,7 +295,8 @@ void control() {
   float u = wheelKp * lag + wheelKd * (wheelSpeed - speed);
   drive((int)constrain(u, -MAX_PWM, MAX_PWM));
 
-  if (state == GOTO && fabs(err) < ARRIVED_DEG) startSweep(targetAngle);
+  // arrived: the ramp has reached the goal and the body is close to it
+  if (state == GOTO && targetAngle == gotoGoal && fabs(err) < ARRIVED_DEG) startSweep(targetAngle);
 }
 
 // ================= states =================
@@ -306,7 +319,7 @@ void goToSide(float offset) {
   float t = frameAngle + offset;                 // from where the body really was
   if (t > MAX_ANGLE) t -= 360;                   // same heading, other way round
   if (t < -MAX_ANGLE) t += 360;
-  targetAngle = t;
+  gotoGoal = t;                                  // the target ramps there in moveTarget()
   setState(GOTO);
   if (DEBUG) {
     Serial.print(F("  -> go to "));
