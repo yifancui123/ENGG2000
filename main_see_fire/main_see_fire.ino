@@ -22,6 +22,10 @@ const unsigned long FIRING_MS = 2500;  // brief needs 2 s, 0.5 s spare for clock
 // 110,000 across about 7 deg, 9,000 below the lowest real saturation (119,268).
 const unsigned long FIRE_MIN_US = 110000;
 
+// A0 at or above this is saturated: on the beacon whatever the sides read.
+// Close up a side sensor saturates too and can beat A0 by noise (119,268-119,760).
+const unsigned long A0_SAT_US = 119000;
+
 // Unpowered sensors all read 119,820-119,980 and look saturated (8 Nov R5-R8)
 const unsigned long NO_POWER_US = 119800;
 
@@ -90,6 +94,7 @@ bool noPower(const SensorFrame &f) {
 Decision choose(const SensorFrame &f) {
   SensorId side = strongestSide(f);
   unsigned long a0 = f.strength[FRONT];
+  if (a0 >= A0_SAT_US) return FIRE;    // saturated A0 always fires
   bool frontStrongest = a0 >= SEEN_MIN_US && (side == FRONT || a0 >= f.strength[side]);
   if (frontStrongest) return a0 >= FIRE_MIN_US ? FIRE : WAIT;
   if (side == RIGHT) return TURN_RIGHT;
