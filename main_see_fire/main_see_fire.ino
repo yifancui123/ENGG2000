@@ -1,23 +1,21 @@
-// MQ Sentinel - see it, fire the laser (based on main_sprint2)
-// Loop: read the sensors while still.
-//   A0 over the threshold: laser on.
-//   Otherwise turn 10 degrees towards the strongest of A1-A3 and look again.
-//   None of them see it: turn 10 degrees the search way and look again.
-// Nothing in loop() blocks: motor, gyro and steady must run every pass.
+// MQ Sentinel - see it, fire the laser (motor logic from simple_pd_fire)
+// Loop: read the sensors only once the body is on its hold angle and still.
+//   A0 >= FIRE_MIN_US and A0 >= the strongest side -> laser ON (stays on while
+//                                                     A0 keeps seeing it, at least FIRING_MS)
+//   A0 strongest but below FIRE_MIN_US             -> stay and hold, look again
+//   A1 (right) / A3 (left) / A2 (back) strongest   -> turn -90 / +90 / 180
+//   nothing seen                                    -> stay and hold
+// Nothing in loop() blocks: gyro, PD and sensors must run every pass.
+// Power on with the satellite HANGING and STILL (gyro calibrates for 2 s, LED on).
 
 #include "analog_sensor.h"
-#include "motor.h"
 #include "gyro.h"
-#include "steady.h"
+#include "pd_hold.h"
 
 // ---- laser ----
 const int LASER_PIN = 12;
+const int LED = 13;
 const unsigned long FIRING_MS = 2500;  // brief needs 2 s, 0.5 s spare for clock error
-
-// ---- turning ----
-const float TURN_STEP = 90;            // deg per turn
-const float MAX_ANGLE = 360;           // deg either way, so the wire can't wind up
-const byte STARTUP_READS = 4;          // 4 reads = 2 s before the first turn
 
 // ---- fire rule ----
 // A0 at or above this = on the beacon. 8 Nov S2: 96,000 fired across 11 deg,
@@ -35,44 +33,29 @@ const bool DEBUG = true;
 const bool SENSOR_TEST = false; // true = sensors and laser only: no motor or gyro
 const char* SENSOR_NAMES[sensorNum] = { "A0", "A1", "A2", "A3" };
 
-const int STARTUP_DELAY_MS = 5000;
+const int SETTLE_DELAY_MS = 3000;      // hands off, let it stop swinging
 
 // LEFT and RIGHT are the body's own sides, looking out along A0 and the laser.
 // A person standing in front of A0 and facing it sees A1 on their left.
 enum SensorId { FRONT, RIGHT, BACK, LEFT };
+enum Decision { FIRE, WAIT, TURN_RIGHT, TURN_LEFT, TURN_BACK, NONE };
 
-unsigned long ms_at_last_laser_fire = 0;
-bool laser_firing = false;
-
-bool still = false;                    // body has finished its turn
-unsigned long stillSinceMs = 0;
-int searchDir = 1;                     // + = anticlockwise (left), seen from above
-byte readsLeft = STARTUP_READS;        // reads with no signal before the next turn
+bool laserOn = false;
+unsigned long laserUntilMs = 0;
 
 //---------------------------------------------------------------------------------------------------------
 void fireLaser() {
-  ms_at_last_laser_fire = millis();
-  laser_firing = true;
+  if (!laserOn) Serial.println(F("FIRE"));
+  laserOn = true;
+  laserUntilMs = millis() + FIRING_MS;
   digitalWrite(LASER_PIN, HIGH);
 }
 
 void updateLaser() {
-  if (millis() - ms_at_last_laser_fire >= FIRING_MS) {
-    laser_firing = false;
+  if (laserOn && (long)(millis() - laserUntilMs) >= 0) {
+    laserOn = false;
     digitalWrite(LASER_PIN, LOW);
-    stillSinceMs = millis();           // next decision needs a frame from after the shot
   }
-}
-
-void startTurn(float deg) {
-  steadyStop();
-  steadyTurnBy(deg);
-  still = false;
-}
-
-void searchStep() {
-  if (fabs(gyroAngle() + searchDir * TURN_STEP) > MAX_ANGLE) searchDir = -searchDir;
-  startTurn(searchDir * TURN_STEP);
 }
 
 void printFrame(const SensorFrame &f) {
@@ -104,37 +87,33 @@ bool noPower(const SensorFrame &f) {
   return true;
 }
 
-// SENSOR_TEST: print what the robot would do with this frame.
-void printDecision(const SensorFrame &f) {
+Decision choose(const SensorFrame &f) {
   SensorId side = strongestSide(f);
-  Serial.print("\t-> ");
-  Serial.println(f.strength[FRONT] >= FIRE_MIN_US ? "FIRE"
-               : side == RIGHT ? "A1: TURN CLOCKWISE"
-               : side == BACK  ? "A2: TURN (BACK)"
-               : side == LEFT  ? "A3: TURN ANTICLOCKWISE"
-               :                 "NONE");
+  unsigned long a0 = f.strength[FRONT];
+  bool frontStrongest = a0 >= SEEN_MIN_US && (side == FRONT || a0 >= f.strength[side]);
+  if (frontStrongest) return a0 >= FIRE_MIN_US ? FIRE : WAIT;
+  if (side == RIGHT) return TURN_RIGHT;
+  if (side == LEFT) return TURN_LEFT;
+  if (side == BACK) return TURN_BACK;
+  return NONE;
 }
 
-void decide(const SensorFrame &f) {
-  if (f.strength[FRONT] >= FIRE_MIN_US) {
-    fireLaser();                       // A0 sees it: fire, no gyro angle check
-    return;
-  }
+void printDecision(Decision d) {
+  Serial.print("\t-> ");
+  Serial.println(d == FIRE       ? "FIRE"
+               : d == WAIT       ? "A0 STRONGEST, BELOW FIRE LEVEL: HOLD"
+               : d == TURN_RIGHT ? "A1: TURN -90"
+               : d == TURN_LEFT  ? "A3: TURN +90"
+               : d == TURN_BACK  ? "A2: TURN 180"
+               :                   "NONE: HOLD");
+}
 
-  SensorId side = strongestSide(f);
-  if (side == LEFT) {
-    readsLeft = 1;
-    startTurn(TURN_STEP);              // + = left
-  } else if (side == RIGHT) {
-    readsLeft = 1;
-    startTurn(-TURN_STEP);
-  } else if (side == BACK) {
-    readsLeft = 1;
-    searchStep();                      // either way round reaches it
-  } else if (--readsLeft == 0) {
-    readsLeft = 1;                     // after the start, one read per step
-    searchStep();
-  }
+void decide(Decision d) {
+  if (d == FIRE) fireLaser();          // A0 faces it: shoot (keeps holding)
+  else if (d == TURN_RIGHT) pdTurnBy(-90);
+  else if (d == TURN_LEFT) pdTurnBy(90);
+  else if (d == TURN_BACK) pdTurnBy(180);
+  // WAIT / NONE: stay and hold
 }
 
 //---------------------------------------------------------------------------------------------------------
@@ -143,6 +122,7 @@ void setup() {
 
   pinMode(LASER_PIN, OUTPUT);
   digitalWrite(LASER_PIN, LOW);
+  pinMode(LED, OUTPUT);
 
   setupSensor();  // power pin + sensor pins
   if (SENSOR_TEST) {
@@ -150,59 +130,58 @@ void setup() {
     return;
   }
 
-  motorBegin();   // motor pins, driver enable, encoder interrupts
-
-  delay(STARTUP_DELAY_MS);
+  pdBegin();      // motor pins, brake, encoder interrupts
 
   if (!gyroBegin()) {
     Serial.println(F("No gyro, check A4/A5"));
-    while (true) {}
+    while (true) {                     // no gyro: LED blinks fast
+      digitalWrite(LED, !digitalRead(LED));
+      delay(100);
+    }
   }
+  delay(SETTLE_DELAY_MS);
+  digitalWrite(LED, HIGH);
   gyroCalibrate(2000);  // satellite hanging STILL
-  steadyStart();        // hold here, first decision comes once this is READY
+  digitalWrite(LED, LOW);
+  pdHoldHere();
+  Serial.println(F("main_see_fire started"));
 }
 
 //---------------------------------------------------------------------------------------------------------
 void loop() {
+  sensorsUpdate();
+  updateLaser();
+
   if (SENSOR_TEST) {
-    sensorsUpdate();
-    if (laser_firing) updateLaser();
     if (sensorsNewFrame()) {
-      printFrame(sensorFrame());
-      printDecision(sensorFrame());
-      if (!laser_firing && sensorFrame().strength[FRONT] >= FIRE_MIN_US) fireLaser();
+      const SensorFrame &f = sensorFrame();
+      printFrame(f);
+      Decision d = choose(f);
+      printDecision(d);
+      if (d == FIRE) fireLaser();
     }
     return;
   }
 
-  motorUpdate();
   gyroUpdate();
-  steadyUpdate();
-  sensorsUpdate();
+  pdUpdate();
 
-  if (!still && steadyReady()) {
-    still = true;
-    stillSinceMs = millis();
-  }
-
-  if (laser_firing) updateLaser();
-
-  if (!sensorsNewFrame() || laser_firing) return;
-
+  if (!sensorsNewFrame()) return;
   const SensorFrame &f = sensorFrame();
-  if (!still || f.onStartMs < stillSinceMs) return;  // taken while turning
+  if (!pdStill() || f.onStartMs < pdStillSinceMs()) return;  // only readings taken on target
 
+  Decision d = choose(f);
   if (DEBUG) {
     printFrame(f);
     Serial.print(F("\thold "));
-    Serial.print(steadyHoldAngle(), 1);
+    Serial.print(pdHoldAngle(), 1);
     Serial.print(F(" gyro "));
     Serial.print(gyroAngle(), 1);
-    printDecision(f);                    // prints "\t-> FIRE / A3: TURN ..." + newline
+    printDecision(d);
   }
   if (noPower(f)) {
     Serial.println(F("\tSENSOR POWER LOST - check D4"));
     return;
   }
-  decide(f);
+  decide(d);
 }
