@@ -4,7 +4,7 @@
 //   A0 >= A0_SAT_US                                 -> laser ON
 //   A0 >= FIRE_MIN_US and A0 >= the strongest side -> laser ON (stays on while
 //                                                     A0 keeps seeing it, at least FIRING_MS)
-//   A0 strongest but below FIRE_MIN_US             -> fine search: 2 deg steps, hill-climb on A0
+//   A0 strongest but below FIRE_MIN_US, or A0 >= NEAR_US -> fine search: 2 deg steps, hill-climb on A0
 //   A1 (right) / A3 (left) / A2 (back) strongest   -> turn -90 / +90 / 180 (45 if ping-pong)
 //   nothing seen for 2 s (4 still frames)           -> turn 45 and look again
 // Nothing in loop() blocks: gyro, PD and sensors must run every pass.
@@ -32,6 +32,14 @@ const unsigned long A0_SAT_US = 119000;
 const float FINE_STEP = 2;             // deg per step (A0's saturated top is about 6 deg wide)
 const byte FINE_MAX = 15;              // give up after 15 steps (30 deg), start again next frame
 const float PINGPONG_TURN = 45;        // coarse turn when the last one went the other way
+
+// A0 at or above this: the beacon is within about +-10 deg of the front (8 Nov S2:
+// A0 63k at -6, 56k at +16). Side sensors leak 85-107k there and can beat A0,
+// so in this zone it always fine-searches and never turns 90.
+const unsigned long NEAR_US = 50000;
+// A3 - A1 closer than this can't tell left from right (8 Nov: unreliable within +-3 deg):
+// the first fine step then goes + and the hill-climb turns it round if A0 drops.
+const unsigned long SIDE_TIE_US = 5000;
 
 // ---- empty search (nothing seen) ----
 const byte EMPTY_FRAMES = 4;           // still frames with nothing seen before a search turn (2 s)
@@ -109,6 +117,7 @@ Decision choose(const SensorFrame &f) {
   if (a0 >= A0_SAT_US) return FIRE;    // saturated A0 always fires
   bool frontStrongest = a0 >= SEEN_MIN_US && (side == FRONT || a0 >= f.strength[side]);
   if (frontStrongest) return a0 >= FIRE_MIN_US ? FIRE : FINE;
+  if (a0 >= NEAR_US) return FINE;      // beacon near the front: a leaking side can win, never turn 90 here
   if (side == RIGHT) return TURN_RIGHT;
   if (side == LEFT) return TURN_LEFT;
   if (side == BACK) return TURN_BACK;
@@ -130,7 +139,9 @@ void printDecision(Decision d) {
 void fineStep(const SensorFrame &f) {
   unsigned long a0 = f.strength[FRONT];
   if (fineDir == 0) {
-    fineDir = f.strength[LEFT] >= f.strength[RIGHT] ? FINE_STEP : -FINE_STEP;
+    unsigned long l = f.strength[LEFT], r = f.strength[RIGHT];
+    bool tie = (l > r ? l - r : r - l) < SIDE_TIE_US;
+    fineDir = (tie || l >= r) ? FINE_STEP : -FINE_STEP;
     fineSteps = 0;
   } else if (a0 < lastA0) {
     fineDir = -fineDir;
