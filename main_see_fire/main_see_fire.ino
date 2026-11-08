@@ -241,7 +241,6 @@ void loop() {
 
   gyroUpdate();
   pdUpdate();
-  digitalWrite(LED, pdStill() ? HIGH : LOW);   // LED on = still on its hold angle (moves allowed)
 
   if (!sensorsNewFrame()) return;
   const SensorFrame &f = sensorFrame();
