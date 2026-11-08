@@ -7,9 +7,10 @@
 // Every reading, in this order:
 //   1. A0 strength >= FIRE_US        -> FIRE: freeze where it is, laser ON
 //   2. while firing, A0 drops below FIRE_OFF_US -> laser OFF, SWEEP around here
-//   3. a side sensor sees one (>= SIDE_MIN_US) -> GOTO: turn so A0 faces it
+//   3. A0 >= NEAR_US (beacon near the front) -> never GOTO; SCAN starts a SWEEP here
+//   4. a side sensor sees one (>= SIDE_MIN_US) -> GOTO: turn so A0 faces it
 //      (the strongest side if several; worked out from where the body really is)
-//   4. A0 sees something weak        -> slow the search down so the tube can't skip it
+//   5. A0 sees something weak        -> slow the search down so the tube can't skip it
 // States:
 //   SCAN   turn slowly one way (reverses at +-MAX_ANGLE) - looking for beacons
 //   GOTO   turning to where a side sensor saw one; then SWEEP there
@@ -81,6 +82,10 @@ const unsigned long SIDE_MIN_US = 2000;   // side strength = sees one (blips ~12
 const unsigned long SEEN_US = 2000;       // A0 sees something (weak)
 const unsigned long FIRE_US = 40000;      // A0 strength to shoot (max 120000)
 const unsigned long FIRE_OFF_US = 25000;  // stop shooting below this (hysteresis)
+// A0 at or above this: the beacon is near the front (8 Nov: A0 falls about 6,000 per deg
+// off its 6 deg flat top, so 20,000 is roughly +-20 deg). The side sensors leak 85-107k
+// there and would win step 3, turning 90 deg away: sweep around here instead.
+const unsigned long NEAR_US = 20000;
 const float RUNAWAY_DEG = 150;            // this far off the target = something's wrong: stop
 
 // ---------------- gyro ----------------
@@ -297,7 +302,7 @@ void control() {
   drive((int)constrain(u, -MAX_PWM, MAX_PWM));
 
   // arrived: the ramp has reached the goal and the body is close to it
-  if (state == GOTO && targetAngle == gotoGoal && fabs(err) < ARRIVED_DEG) startSweep(targetAngle);
+  if (state == GOTO && targetAngle == gotoGoal && fabs(err) < ARRIVED_DEG) startSweep(targetAngle, 1);
 }
 
 // ================= states =================
@@ -309,9 +314,9 @@ void setState(State s) {
   if (DEBUG) Serial.println(NAMES[s]);
 }
 
-void startSweep(float centre) {
+void startSweep(float centre, int dir) {   // dir: first swing +1 anticlockwise / -1
   sweepCentre = centre;
-  sweepDir = 1;
+  sweepDir = dir;
   sweepEnds = 0;
   setState(SWEEP);
 }
@@ -414,10 +419,17 @@ void decide() {
   if (state == FIRE) {
     if (a0 >= FIRE_OFF_US) return;               // still close enough: keep firing
     laser(false);
-    startSweep(targetAngle);
+    startSweep(targetAngle, 1);
   }
 
-  // 3. a side sensor sees one: turn so A0 faces it (not while already turning there)
+  // 3. A0 sees it fairly well: the beacon is near the front. Never turn 90 here
+  //    (a leaking side sensor would win): sweep around here, towards the brighter side.
+  if (a0 >= NEAR_US) {
+    if (state == SCAN) startSweep(bodyAngle, strength[LEFT] >= strength[RIGHT] ? 1 : -1);
+    return;
+  }
+
+  // 4. a side sensor sees one: turn so A0 faces it (not while already turning there)
   int side = -1;
   for (byte i = RIGHT; i <= LEFT; i++) {
     if (strength[i] >= SIDE_MIN_US && (side < 0 || strength[i] > strength[side])) side = i;
@@ -429,7 +441,7 @@ void decide() {
     return;
   }
 
-  // 4. A0 sees something weak while searching: slow down so the tube doesn't skip it
+  // 5. A0 sees something weak while searching: slow down so the tube doesn't skip it
   if (state == SCAN) scanRate = a0 >= SEEN_US ? SLOW_RATE : SCAN_RATE;
 }
 
