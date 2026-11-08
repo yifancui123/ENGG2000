@@ -15,7 +15,7 @@
 //   SCAN   turn slowly one way (reverses at +-MAX_ANGLE) - looking for beacons
 //   GOTO   turning to where a side sensor saw one; then SWEEP there
 //   SWEEP  swing +-SWEEP_HALF around a spot (tube = narrow view); nothing -> SCAN
-//   FIRE   laser on while A0 stays strong; the PID keeps it pointing there
+//   FIRE   laser on while A0 stays strong; creeps to the middle of A0's view, the PID holds it
 // Beacons turn on and off (up to 15): it never stops looking.
 //
 // Control (no braking, no pulses): gyro PID every 5 ms, angle error -> body
@@ -89,6 +89,13 @@ const unsigned long FIRE_OFF_US = 25000;  // stop shooting below this (hysteresi
 // off its 6 deg flat top, so 20,000 is roughly +-20 deg). The side sensors leak 85-107k
 // there and would win step 3, turning 90 deg away: sweep around here instead.
 const unsigned long NEAR_US = 20000;
+// aim while firing: creep towards a stronger A0, then to the middle of its flat top
+const unsigned long A0_SAT_US = 119000;   // A0 saturated = on its flat top (8 Nov: 6.4 deg wide)
+const unsigned long AIM_LOST_US = 110000; // centred, then dropped below this: centre again
+const float AIM_SLOPE = 6000;             // A0 falls about this much per deg off its top (8 Nov)
+const float AIM_STEP_MIN = 1.0;           // deg per reading while climbing: (top - A0) / slope * 0.6,
+const float AIM_STEP_MAX = 4.0;           // kept within 1-4 deg
+const float AIM_OVERSHOOT = 3.0;          // deg past the first saturated reading = middle of the top
 const float RUNAWAY_DEG = 150;            // this far off the target = something's wrong: stop
 
 // ---------------- gyro ----------------
@@ -138,6 +145,9 @@ bool frameReady = false;
 float frameAngle = 0;            // body angle when the reading was taken
 
 bool laserOn = false;
+int aimDir = 1;                  // +1 anticlockwise / -1: which way A0 gets stronger
+unsigned long lastAimA0 = 0;     // A0 at the last aim step
+bool aimDone = false;            // centred on A0's flat top: just hold
 
 // ================= motor =================
 void encoderISR() {
@@ -437,6 +447,37 @@ void printFrame() {
   Serial.println();
 }
 
+// ================= aim while firing =================
+// Freezing at the first reading over FIRE_US stops at the EDGE of A0's view
+// (up to ~10 deg off). So keep the laser on but creep towards a stronger A0
+// (turn round if it got weaker), 1-4 deg per reading: bigger the weaker A0 is. Once it climbs onto
+// the saturated top, go AIM_OVERSHOOT further = the middle of the top.
+void startAim(unsigned long a0) {
+  if (fabs(bodyRate) > 2) aimDir = bodyRate > 0 ? 1 : -1;   // came in moving: centre is ahead
+  else aimDir = strength[LEFT] >= strength[RIGHT] ? 1 : -1;
+  lastAimA0 = a0;
+  aimDone = a0 >= A0_SAT_US;                                // already on the top: hold
+}
+
+void aim(unsigned long a0) {
+  if (aimDone) {
+    if (a0 < AIM_LOST_US) {                                 // drifted off the top: centre again
+      aimDone = false;
+      lastAimA0 = a0;
+    }
+    return;
+  }
+  if (a0 >= A0_SAT_US) {
+    if (lastAimA0 < A0_SAT_US) targetAngle += aimDir * AIM_OVERSHOOT;   // just climbed onto the top
+    aimDone = true;
+    return;
+  }
+  if (a0 < lastAimA0) aimDir = -aimDir;                     // weaker: wrong way
+  lastAimA0 = a0;
+  float step = constrain((A0_SAT_US - (float)a0) / AIM_SLOPE * 0.6, AIM_STEP_MIN, AIM_STEP_MAX);
+  targetAngle += aimDir * step;
+}
+
 // ================= decide (every reading) =================
 void decide() {
   unsigned long a0 = strength[FRONT];
@@ -446,6 +487,9 @@ void decide() {
     if (state != FIRE) {
       targetAngle = bodyAngle;                   // freeze on the beacon
       setState(FIRE);
+      startAim(a0);
+    } else {
+      aim(a0);                                   // creep to the middle of A0's view
     }
     laser(true);
     return;
@@ -453,7 +497,10 @@ void decide() {
 
   // 2. was firing and lost it: look around this spot
   if (state == FIRE) {
-    if (a0 >= FIRE_OFF_US) return;               // still close enough: keep firing
+    if (a0 >= FIRE_OFF_US) {                     // still close enough: keep firing
+      aim(a0);
+      return;
+    }
     laser(false);
     startSweep(targetAngle, 1);
   }
