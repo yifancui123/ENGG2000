@@ -4,8 +4,8 @@
 //   A0 >= A0_SAT_US                                 -> laser ON
 //   A0 >= FIRE_MIN_US and A0 >= the strongest side -> laser ON (stays on while
 //                                                     A0 keeps seeing it, at least FIRING_MS)
-//   A0 strongest but below FIRE_MIN_US             -> stay and hold, look again
-//   A1 (right) / A3 (left) / A2 (back) strongest   -> turn -90 / +90 / 180
+//   A0 strongest but below FIRE_MIN_US             -> fine search: 2 deg steps, hill-climb on A0
+//   A1 (right) / A3 (left) / A2 (back) strongest   -> turn -90 / +90 / 180 (45 if ping-pong)
 //   nothing seen                                    -> stay and hold
 // Nothing in loop() blocks: gyro, PD and sensors must run every pass.
 // Power on with the satellite HANGING and STILL (gyro calibrates for 2 s, LED on).
@@ -28,6 +28,11 @@ const unsigned long FIRE_MIN_US = 110000;
 // Close up a side sensor saturates too and can beat A0 by noise (119,268-119,760).
 const unsigned long A0_SAT_US = 119000;
 
+// ---- fine search (A0 strongest but below FIRE_MIN_US) ----
+const float FINE_STEP = 2;             // deg per step (A0's saturated top is about 6 deg wide)
+const byte FINE_MAX = 15;              // give up after 15 steps (30 deg), start again next frame
+const float PINGPONG_TURN = 45;        // coarse turn when the last one went the other way
+
 // ---- direction rule ----
 const unsigned long SEEN_MIN_US = 2000;  // at or above this = lit (blips reach ~1200)
 
@@ -45,10 +50,15 @@ const byte GYRO_TRIES = 5;
 // LEFT and RIGHT are the body's own sides, looking out along A0 and the laser.
 // A person standing in front of A0 and facing it sees A1 on their left.
 enum SensorId { FRONT, RIGHT, BACK, LEFT };
-enum Decision { FIRE, WAIT, TURN_RIGHT, TURN_LEFT, TURN_BACK, NONE };
+enum Decision { FIRE, FINE, TURN_RIGHT, TURN_LEFT, TURN_BACK, NONE };
 
 bool laserOn = false;
 unsigned long laserUntilMs = 0;
+
+float fineDir = 0;                     // +FINE_STEP / -FINE_STEP, 0 = not fine searching
+unsigned long lastA0 = 0;              // A0 at the last fine step
+byte fineSteps = 0;
+int lastCoarse = 0;                    // last 90 turn: +1 left, -1 right, 0 none
 
 //---------------------------------------------------------------------------------------------------------
 void fireLaser() {
@@ -92,7 +102,7 @@ Decision choose(const SensorFrame &f) {
   unsigned long a0 = f.strength[FRONT];
   if (a0 >= A0_SAT_US) return FIRE;    // saturated A0 always fires
   bool frontStrongest = a0 >= SEEN_MIN_US && (side == FRONT || a0 >= f.strength[side]);
-  if (frontStrongest) return a0 >= FIRE_MIN_US ? FIRE : WAIT;
+  if (frontStrongest) return a0 >= FIRE_MIN_US ? FIRE : FINE;
   if (side == RIGHT) return TURN_RIGHT;
   if (side == LEFT) return TURN_LEFT;
   if (side == BACK) return TURN_BACK;
@@ -102,19 +112,49 @@ Decision choose(const SensorFrame &f) {
 void printDecision(Decision d) {
   Serial.print("\t-> ");
   Serial.println(d == FIRE       ? "FIRE"
-               : d == WAIT       ? "A0 STRONGEST, BELOW FIRE LEVEL: HOLD"
+               : d == FINE       ? "A0 STRONGEST, BELOW FIRE LEVEL: FINE STEP 2"
                : d == TURN_RIGHT ? "A1: TURN -90"
                : d == TURN_LEFT  ? "A3: TURN +90"
                : d == TURN_BACK  ? "A2: TURN 180"
                :                   "NONE: HOLD");
 }
 
-void decide(Decision d) {
-  if (d == FIRE) fireLaser();          // A0 faces it: shoot (keeps holding)
-  else if (d == TURN_RIGHT) pdTurnBy(-90);
-  else if (d == TURN_LEFT) pdTurnBy(90);
+// A0 strongest but weak: step 2 deg. Start towards the brighter of A3 (left) / A1 (right),
+// then hill-climb: if A0 got weaker than at the last step, turn the other way.
+void fineStep(const SensorFrame &f) {
+  unsigned long a0 = f.strength[FRONT];
+  if (fineDir == 0) {
+    fineDir = f.strength[LEFT] >= f.strength[RIGHT] ? FINE_STEP : -FINE_STEP;
+    fineSteps = 0;
+  } else if (a0 < lastA0) {
+    fineDir = -fineDir;
+  }
+  lastA0 = a0;
+  if (++fineSteps > FINE_MAX) {        // not found in 30 deg: stop, start again next frame
+    fineDir = 0;
+    return;
+  }
+  pdTurnBy(fineDir);
+}
+
+// Side sensor strongest: turn 90 to it, but only 45 if the last coarse turn
+// went the other way (beacon near 45 deg: stops the left-right ping-pong)
+void coarseTurn(int dir) {
+  float deg = (lastCoarse == -dir) ? PINGPONG_TURN : 90;
+  lastCoarse = dir;
+  pdTurnBy(dir * deg);
+}
+
+// Any decision that isn't a fine step ends the fine search.
+void decide(Decision d, const SensorFrame &f) {
+  if (d != FINE) fineDir = 0;
+  if (d != TURN_LEFT && d != TURN_RIGHT) lastCoarse = 0;
+
+  if (d == FINE) fineStep(f);
+  else if (d == TURN_RIGHT) coarseTurn(-1);
+  else if (d == TURN_LEFT) coarseTurn(+1);
   else if (d == TURN_BACK) pdTurnBy(180);
-  // WAIT / NONE: stay and hold
+  // NONE: stay and hold
 }
 
 // Calibrate until the gyro reads still: after each 2 s calibration (LED on),
@@ -193,9 +233,11 @@ void loop() {
   Decision d = choose(f);
   if (d == FIRE) {                     // A0 high: shoot, whatever the body is doing
     fireLaser();
+    fineDir = 0;
+    lastCoarse = 0;
     return;
   }
-  if (!pdStill() || f.onStartMs < pdStillSinceMs()) return;  // turns only from readings taken on target
+  if (!pdStill() || f.onStartMs < pdStillSinceMs()) return;  // moves only from readings taken on target
 
   // Prints off: it runs hanging with no USB.
   // if (DEBUG) {
@@ -206,5 +248,5 @@ void loop() {
   //   Serial.print(gyroAngle(), 1);
   //   printDecision(d);
   // }
-  decide(d);
+  decide(d, f);
 }
