@@ -27,9 +27,6 @@ const unsigned long FIRE_MIN_US = 110000;
 // Unpowered sensors all read 119,820-119,980 and look saturated (8 Nov R5-R8)
 const unsigned long NO_POWER_US = 119800;
 
-// ---- aim check ----
-const float FIRE_TOL = 1.0;            // deg, fire only this close to the held angle
-
 // ---- direction rule ----
 const unsigned long SEEN_MIN_US = 2000;  // at or above this = lit (blips reach ~1200)
 
@@ -120,15 +117,7 @@ void printDecision(const SensorFrame &f) {
 
 void decide(const SensorFrame &f) {
   if (f.strength[FRONT] >= FIRE_MIN_US) {
-    if (fabs(steadyHoldAngle() - gyroAngle()) < FIRE_TOL) {
-      fireLaser();
-    } else {
-      // A0 sees it from here, so here is the target: hold this angle,
-      // fire on the next frame taken once it is still
-      steadyStop();
-      steadyStartAt(gyroAngle());
-      still = false;
-    }
+    fireLaser();                       // A0 sees it: fire, no gyro angle check
     return;
   }
 
